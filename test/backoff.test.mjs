@@ -4,7 +4,9 @@ import assert from 'node:assert/strict'
 
 import {
   TOOL_TIMEOUT,
+  applyJitter,
   cancellableDelay,
+  computeDelay,
   delayFor,
   isRetryable,
   makeDeadline,
@@ -115,4 +117,32 @@ test('toolTimeoutResult is a structured TOOL_TIMEOUT failure', () => {
   assert.equal(result.isError, true)
   assert.equal(result.error.info.code, TOOL_TIMEOUT)
   assert.match(result.content[0].text, /timed out after 5000ms/)
+})
+
+test('applyJitter none keeps the base delay', () => {
+  assert.equal(applyJitter(1000, 'none', 0.5, () => 0.99), 1000)
+})
+
+test('applyJitter equal spreads ±ratio around the base', () => {
+  const base = 2000
+  const ratio = 0.5
+  assert.equal(applyJitter(base, 'equal', ratio, () => 0), base * 0.5)
+  assert.equal(applyJitter(base, 'equal', ratio, () => 1), base * 1.5)
+  assert.equal(applyJitter(base, 'equal', ratio, () => 0.5), base)
+})
+
+test('applyJitter full is uniform 0..base', () => {
+  const base = 4000
+  assert.equal(applyJitter(base, 'full', 0.5, () => 0), 0)
+  assert.equal(applyJitter(base, 'full', 0.5, () => 1), base)
+  assert.equal(applyJitter(base, 'full', 0.5, () => 0.25), base * 0.25)
+})
+
+test('computeDelay includes jitter and never returns below 1 ms', () => {
+  const settings = { minTimeoutMs: 1000, maxTimeoutMs: 60000, factor: 2, jitter: 'full', jitterRatio: 0.5 }
+  assert.equal(computeDelay(1, settings, () => 0), 1)
+  assert.equal(computeDelay(1, settings, () => 0.5), 500)
+  assert.equal(computeDelay(1, settings, () => 1), 1000)
+  const none = { ...settings, jitter: 'none' }
+  assert.equal(computeDelay(3, none), 4000)
 })

@@ -64,6 +64,12 @@ Behavior details:
 - **What is retried** — only failed results whose structured error code is in
   `codes` (default `TOOL_TIMEOUT`). The catch-all `*` retries any failure. A
   call without a structured code is never retried unless `*` is configured.
+- **Jitter** — retry delays are randomized to spread parallel calls (DSH
+  runs up to several sub-calls concurrently): `none` keeps the fixed
+  exponential schedule, `equal` (default) spreads ±`jitterRatio` around the
+  base, `full` draws uniformly from `0..base`.
+- **Per-tool overrides** — `toolOverrides` lets you override any retry
+  setting per tool; unset fields inherit the global values.
 - **Cancellation wins** — if the caller signal aborts during a wait, the
   retry stops and the last failure is returned. A call whose caller already
   aborted is never retried.
@@ -71,6 +77,10 @@ Behavior details:
   returned unchanged, so the model sees the genuine error.
 - **No re-approval** — pre-execution checks, guards, and approvals run once,
   before the loop; `tools/post-execute` and `tools/result` run once, after it.
+- **Durable session events** — every scheduled retry appends `tool/retry`
+  (`callId`, `tool`, `attempt`, `code`, `delayMs`) and `tool/retry-started`
+  to the session log, so retries are visible in the session history and can be
+  analyzed per session.
 
 ### Per-attempt deadlines
 
@@ -87,8 +97,10 @@ for genuinely slow or momentarily unavailable work.
 
 - **Live counters** — dispatching attempts, retries issued, deadline hits, and
   the last error code, since the Host loaded the plugin (`GET /backoff/status`).
+- **Per-session activity** — the same counters broken down by session, top
+  activity first.
 - **Behavior** — the configuration below, editable in place with no restart via
-  volatile fields.
+  volatile fields, including jitter and per-tool overrides.
 
 ## Configuration
 
@@ -106,6 +118,9 @@ or edit it live on the **Settings → Backoff** page.
 | `codes` | string[] | `['TOOL_TIMEOUT']` | Error codes that trigger a retry; `["*"]` = any failure. |
 | `tools` | string[] | `[]` | Tool names to cover; empty = all tools. |
 | `armTimeout` | boolean | `true` | Enforce each tool's declared `timeoutMs` as a per-attempt deadline. |
+| `jitter` | `'none' \| 'equal' \| 'full'` | `'equal'` | Delay randomization: fixed, ±ratio centered, or uniform 0..base. |
+| `jitterRatio` | number | `0.5` | Spread for `equal` jitter (±50 %). |
+| `toolOverrides` | object | `{}` | Per-tool partial overrides; unset fields inherit globals. |
 
 ```yaml
 - id: backoff
@@ -119,6 +134,14 @@ or edit it live on the **Settings → Backoff** page.
     codes: [TOOL_TIMEOUT]  # retry deadline hits only
     tools: [pwsh, bash]     # shell tools only
     armTimeout: true
+    jitter: equal           # ±50% around the base (jitterRatio 0.5)
+    jitterRatio: 0.5
+    toolOverrides:          # per-tool overrides
+      pwsh:
+        maxAttempts: 3      # fewer attempts for shells
+        codes: [TOOL_TIMEOUT, COMMAND_FAILED]
+      web_fetch:
+        unlimited: true     # retry web fetches until success
 ```
 
 ## Safety notes

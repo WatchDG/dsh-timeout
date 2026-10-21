@@ -3,8 +3,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { snapshot } from '../lib/config.js'
-import { STATUS_PATH, createExecuteWithBackoff, mount } from '../lib/plugin.js'
+import { policyFor, snapshot } from '../lib/config.js'
+import { RETRY_EVENT, RETRY_STARTED_EVENT, STATUS_PATH, createExecuteWithBackoff, mount } from '../lib/plugin.js'
 
 const SUCCESS = { isError: false, value: { ok: true } }
 const FAIL = (code) => ({ isError: true, error: { message: 'boom', info: code ? { code } : undefined } })
@@ -17,18 +17,21 @@ const FAIL = (code) => ({ isError: true, error: { message: 'boom', info: code ? 
  *   results?: object[],
  *   getToolTimeoutMs?: (exec: object) => number | undefined,
  *   delay?: (ms: number, signal: AbortSignal) => Promise<boolean>,
+ *   agent?: object,
+ *   sessions?: Map<string, object>,
  * }} [options]
  */
-function createRun({ config = {}, results = [SUCCESS], getToolTimeoutMs = () => 5000, delay } = {}) {
+function createRun({ config = {}, results = [SUCCESS], getToolTimeoutMs = () => 5000, delay, agent, sessions } = {}) {
   const stats = { attempts: 0, retries: 0, timeouts: 0, lastCode: null }
   const loop = createExecuteWithBackoff({
     readSettings: () => snapshot(config),
     getToolTimeoutMs,
     delay,
     stats,
+    sessions,
   })
   let runs = 0
-  const exec = { name: 'pwsh', signal: new AbortController().signal, agent: undefined }
+  const exec = { name: 'pwsh', signal: new AbortController().signal, agent }
   const next = async () => {
     runs += 1
     const body = results[Math.min(runs - 1, results.length - 1)]
@@ -205,6 +208,87 @@ test('a throwing next() with wildcard codes is retried', async () => {
   const result = await loop({ name: 'web_fetch', signal: new AbortController().signal }, next)
   assert.equal(result, SUCCESS)
   assert.equal(runs, 2)
+})
+
+test('per-tool override raises the attempt budget beyond the global cap', async () => {
+  const h = createRun({
+    config: { maxAttempts: 2, toolOverrides: { pwsh: { maxAttempts: 4 } } },
+    results: [FAIL('TOOL_TIMEOUT'), FAIL('TOOL_TIMEOUT'), FAIL('TOOL_TIMEOUT'), SUCCESS],
+    delay: IMMEDIATE,
+  })
+  const result = await h.run()
+  assert.equal(result, SUCCESS)
+  assert.equal(h.runs, 4)
+})
+
+test('per-tool override replaces the retryable code list', async () => {
+  const h = createRun({
+    config: { toolOverrides: { pwsh: { codes: ['MY_CODE'] } } },
+    results: [FAIL('MY_CODE'), SUCCESS],
+    delay: IMMEDIATE,
+  })
+  const result = await h.run()
+  assert.equal(result, SUCCESS)
+  assert.equal(h.runs, 2)
+})
+
+test('an override for another tool does not affect this tool', async () => {
+  const h = createRun({
+    config: { maxAttempts: 2, toolOverrides: { bash: { maxAttempts: 9 } } },
+    results: [FAIL('TOOL_TIMEOUT'), FAIL('TOOL_TIMEOUT'), FAIL('TOOL_TIMEOUT')],
+    delay: IMMEDIATE,
+  })
+  const result = await h.run()
+  assert.equal(result.isError, true)
+  assert.equal(h.runs, 2)
+})
+
+test('policyFor is used by the loop and merged correctly', () => {
+  const settings = snapshot({ toolOverrides: { pwsh: { maxAttempts: 7 } } })
+  const policy = policyFor(settings, 'pwsh')
+  assert.equal(policy.maxAttempts, 7)
+  assert.equal(policy.jitter, 'equal')
+  assert.equal(policyFor(settings, 'bash').maxAttempts, 3)
+})
+
+test('durable session events are appended for each retry', async () => {
+  const events = []
+  const agent = { id: 's1', session: { append: (type, data) => events.push({ type, data }) } }
+  const h = createRun({
+    agent,
+    results: [FAIL('TOOL_TIMEOUT'), SUCCESS],
+    delay: IMMEDIATE,
+  })
+  const result = await h.run()
+  assert.equal(result, SUCCESS)
+  assert.equal(events.length, 2)
+  assert.equal(events[0].type, RETRY_EVENT)
+  assert.equal(events[0].data.tool, 'pwsh')
+  assert.equal(events[0].data.attempt, 1)
+  assert.equal(events[0].data.code, 'TOOL_TIMEOUT')
+  assert.equal(typeof events[0].data.delayMs, 'number')
+  assert.equal(events[0].data.callId, undefined)
+  assert.equal(events[1].type, RETRY_STARTED_EVENT)
+  assert.equal(events[1].data.attempt, 1)
+})
+
+test('per-session counters accumulate in the sessions map', async () => {
+  const sessions = new Map()
+  const agent = { id: 's1', session: { append: () => {} } }
+  const h = createRun({
+    agent,
+    sessions,
+    config: { maxAttempts: 3 },
+    results: [FAIL('TOOL_TIMEOUT'), FAIL('TOOL_TIMEOUT'), SUCCESS],
+    delay: IMMEDIATE,
+  })
+  await h.run()
+  assert.equal(h.runs, 3)
+  const record = sessions.get('s1')
+  assert.equal(record.attempts, 3)
+  assert.equal(record.retries, 2)
+  assert.equal(record.timeouts, 0)
+  assert.equal(record.lastCode, 'TOOL_TIMEOUT')
 })
 
 test('mount registers the tools/execute listener and dispatches through it', async () => {

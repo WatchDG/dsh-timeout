@@ -14,6 +14,9 @@ window.__ModuleLoader__.load({
     /** Authenticated Host route registered by lib/plugin.js. */
     const STATUS_PATH = '/backoff/status'
 
+    /** Jitter modes, matching lib/config.js JITTER_MODES. */
+    const JITTER_MODES = ['none', 'equal', 'full']
+
     /** English copy. */
     const en = {
       nav: 'Backoff',
@@ -27,6 +30,14 @@ window.__ModuleLoader__.load({
       timeouts: 'deadline hits',
       lastCode: 'last error code',
       noCode: 'none yet',
+      sessionsTitle: 'Per-session activity',
+      sessionsIntro: 'Calls that carried an agent, broken down by session. Top activity first.',
+      sessionEmpty: 'No retained calls yet.',
+      sessionId: 'Session',
+      sessionAttempts: 'attempts',
+      sessionRetries: 'retries',
+      sessionTimeouts: 'timeouts',
+      sessionLastCode: 'last code',
       configTitle: 'Behavior',
       configIntro: 'Applies immediately, without a restart.',
       enabledLabel: 'Enabled',
@@ -47,6 +58,18 @@ window.__ModuleLoader__.load({
       toolsHint: 'Comma-separated tool names to cover (pwsh, bash, …). Empty = all tools.',
       armTimeoutLabel: 'Enforce per-attempt timeout',
       armTimeoutHint: 'When a tool declares timeoutMs, arm it on each attempt, so a hung call becomes a retryable timeout instead of a stuck dispatch.',
+      jitterLabel: 'Jitter',
+      jitterHint: 'Randomizes delays to spread parallel retries. None = fixed; Equal = ±ratio around the base; Full = uniform 0..base.',
+      'jitterMode.none': 'None (fixed)',
+      'jitterMode.equal': 'Equal (±ratio)',
+      'jitterMode.full': 'Full (0..base)',
+      jitterRatioLabel: 'Jitter ratio',
+      jitterRatioHint: 'Spread for Equal jitter: 0.5 = ±50%. Only applies in Equal mode.',
+      overridesLabel: 'Per-tool overrides',
+      overridesHint: 'Override retry settings for specific tools. Missing fields inherit the global values above.',
+      overrideToolPlaceholder: 'tool name, e.g. pwsh',
+      overrideAdd: 'Add tool',
+      overrideRemove: 'Remove',
       applying: 'Applying…',
       applied: 'Applied.',
       failed: 'The Host did not accept this value; the field was left unchanged.',
@@ -69,6 +92,14 @@ window.__ModuleLoader__.load({
       timeouts: 'срабатываний таймаута',
       lastCode: 'последний код ошибки',
       noCode: 'пока нет',
+      sessionsTitle: 'Активность по сессиям',
+      sessionsIntro: 'Вызовы с агентом, разбитые по сессиям. Сначала самые активные.',
+      sessionEmpty: 'Вызовов с агентом пока не было.',
+      sessionId: 'Сессия',
+      sessionAttempts: 'попыток',
+      sessionRetries: 'повторов',
+      sessionTimeouts: 'таймаутов',
+      sessionLastCode: 'последний код',
       configTitle: 'Поведение',
       configIntro: 'Применяется сразу, без перезапуска.',
       enabledLabel: 'Включён',
@@ -89,6 +120,18 @@ window.__ModuleLoader__.load({
       toolsHint: 'Имена инструментов через запятую (pwsh, bash, …). Пусто — все инструменты.',
       armTimeoutLabel: 'Применять таймаут к попытке',
       armTimeoutHint: 'Если инструмент объявляет timeoutMs, устанавливать его на каждую попытку — зависший вызов станет повторяемым таймаутом, а не зависшей отправкой.',
+      jitterLabel: 'Джиттер',
+      jitterHint: 'Случайно «размазывает» задержки, чтобы параллельные повторы не били синхронно. None — фиксированно; Equal — ±ratio вокруг базовой; Full — равномерно 0..base.',
+      'jitterMode.none': 'Нет (фиксированно)',
+      'jitterMode.equal': 'Равномерно (±ratio)',
+      'jitterMode.full': 'Полный (0..base)',
+      jitterRatioLabel: 'Доля джиттера',
+      jitterRatioHint: 'Разброс для режима Equal: 0.5 = ±50%. Применяется только в режиме Equal.',
+      overridesLabel: 'Переопределения по инструментам',
+      overridesHint: 'Переопределяют настройки повторов для конкретных инструментов. Незаполненные поля наследуют глобальные значения выше.',
+      overrideToolPlaceholder: 'имя инструмента, например pwsh',
+      overrideAdd: 'Добавить инструмент',
+      overrideRemove: 'Удалить',
       applying: 'Применяю…',
       applied: 'Применено.',
       failed: 'Хост не принял значение; поле осталось прежним.',
@@ -100,7 +143,7 @@ window.__ModuleLoader__.load({
 
     /** Page-local styles; tokens only, so light/dark follows the host theme. */
     const CSS = `
-.bo-section{display:flex;flex-direction:column;gap:20px;width:100%;max-width:640px;padding:4px 0 24px;color:var(--dsw-alias-label-primary);font-size:14px;line-height:20px}
+.bo-section{display:flex;flex-direction:column;gap:20px;width:100%;max-width:680px;padding:4px 0 24px;color:var(--dsw-alias-label-primary);font-size:14px;line-height:20px}
 .bo-title{margin:0;font-size:16px;font-weight:600}
 .bo-sub{margin:24px 0 0;padding-top:16px;border-top:.5px solid var(--dsw-alias-border-l1);font-size:16px;font-weight:600}
 .bo-intro{margin:0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:19px}
@@ -120,6 +163,15 @@ window.__ModuleLoader__.load({
 .bo-stat{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:.5px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1)}
 .bo-stat b{font-size:15px;font-weight:600}
 .bo-stat span{font-size:11px;color:var(--dsw-alias-label-secondary)}
+.bo-sess{display:flex;flex-direction:column;gap:6px}
+.bo-sess-row{display:grid;grid-template-columns:minmax(120px,1.4fr) repeat(3,minmax(60px,.6fr)) minmax(80px,.9fr);gap:8px;align-items:center;padding:8px 10px;border:.5px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1);font-size:12px;line-height:16px}
+.bo-sess-row b{font-weight:600}
+.bo-sess-row span{color:var(--dsw-alias-label-secondary)}
+.bo-overrides{display:flex;flex-direction:column;gap:12px}
+.bo-override{border:.5px solid var(--dsw-alias-border-l1);border-radius:8px;padding:10px 12px;background:var(--dsw-alias-bg-layer-1);display:flex;flex-direction:column;gap:10px}
+.bo-override-head{display:flex;align-items:center;gap:8px}
+.bo-override-head .bo-input{flex:1;min-width:120px}
+.bo-override-fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
 .bo-note{margin:4px 0 0;padding-top:12px;border-top:.5px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
 `
 
@@ -134,6 +186,21 @@ window.__ModuleLoader__.load({
       { key: 'codes', kind: 'csv' },
       { key: 'tools', kind: 'csv' },
       { key: 'armTimeout', kind: 'boolean' },
+      { key: 'jitter', kind: 'select' },
+      { key: 'jitterRatio', kind: 'number' },
+    ]
+
+    /** Fields available inside each per-tool override row. */
+    const OVERRIDE_FIELD_DEFS = [
+      { key: 'maxAttempts', kind: 'number' },
+      { key: 'unlimited', kind: 'boolean' },
+      { key: 'codes', kind: 'csv' },
+      { key: 'minTimeoutMs', kind: 'number' },
+      { key: 'maxTimeoutMs', kind: 'number' },
+      { key: 'factor', kind: 'number' },
+      { key: 'armTimeout', kind: 'boolean' },
+      { key: 'jitter', kind: 'select' },
+      { key: 'jitterRatio', kind: 'number' },
     ]
 
     /** One editable row: label, hint, input, and commit-on-change. */
@@ -151,13 +218,25 @@ window.__ModuleLoader__.load({
           }),
           label,
         )
+      } else if (def.kind === 'select') {
+        control = h('select', {
+          className: 'bo-input',
+          value: value === undefined ? 'equal' : value,
+          disabled,
+          onChange: (event) => onChange(event.target.value),
+        },
+          JITTER_MODES.map((mode) =>
+            h('option', { key: mode, value: mode }, t(`jitterMode.${mode}`)),
+          ),
+        )
       } else if (def.kind === 'number') {
         control = h('input', {
           type: 'number',
           className: 'bo-input',
           value: value === undefined ? '' : String(value),
-          min: def.key === 'factor' ? 1.01 : 1,
-          step: def.key === 'factor' ? 0.1 : 1,
+          min: def.key === 'factor' ? 1.01 : def.key === 'jitterRatio' ? 0.01 : 1,
+          max: def.key === 'jitterRatio' ? 1 : undefined,
+          step: def.key === 'factor' ? 0.1 : def.key === 'jitterRatio' ? 0.05 : 1,
           disabled,
           onChange: (event) => onChange(event.target.value),
         })
@@ -177,6 +256,56 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** One per-tool override row. */
+    function OverrideRow({ t, tool, value, disabled, onChange, onRemove }) {
+      const row = value && typeof value === 'object' ? value : {}
+      const patch = (key, raw) => {
+        const next = { ...row }
+        if (key === 'unlimited' || key === 'armTimeout') {
+          next[key] = raw === true
+        } else if (key === 'codes' || key === 'tools') {
+          next[key] = typeof raw === 'string' ? raw.split(',').map((v) => v.trim()).filter(Boolean) : raw
+        } else if (key === 'jitter') {
+          next[key] = raw
+        } else {
+          const number = Number(raw)
+          next[key] = Number.isFinite(number) ? number : undefined
+          if (next[key] === undefined) delete next[key]
+        }
+        onChange(next)
+      }
+      return h('div', { className: 'bo-override' },
+        h('div', { className: 'bo-override-head' },
+          h('input', {
+            type: 'text',
+            className: 'bo-input',
+            value: tool,
+            placeholder: t('overrideToolPlaceholder'),
+            disabled,
+            onChange: (event) => onChange(null, event.target.value),
+          }),
+          h('button', {
+            type: 'button',
+            className: 'bo-button',
+            disabled,
+            onClick: onRemove,
+          }, t('overrideRemove')),
+        ),
+        h('div', { className: 'bo-override-fields' },
+          OVERRIDE_FIELD_DEFS.map((def) =>
+            h(Field, {
+              key: def.key,
+              t,
+              def,
+              value: row[def.key],
+              disabled,
+              onChange: (raw) => patch(def.key, raw),
+            }),
+          ),
+        ),
+      )
+    }
+
     /** The Settings → Backoff section. */
     function Section(props) {
       const t = typeof props.t === 'function' ? props.t : (key) => en[key] ?? key
@@ -184,6 +313,7 @@ window.__ModuleLoader__.load({
       const [nonce, setNonce] = React.useState(0)
       const [draft, setDraft] = React.useState({})
       const [feedback, setFeedback] = React.useState(null)
+      const [newTool, setNewTool] = React.useState('')
 
       React.useEffect(() => {
         let alive = true
@@ -203,6 +333,9 @@ window.__ModuleLoader__.load({
               codes: payload.settings.codes,
               tools: payload.settings.tools,
               armTimeout: payload.settings.armTimeout,
+              jitter: payload.settings.jitter,
+              jitterRatio: payload.settings.jitterRatio,
+              overrides: payload.settings.toolOverrides ?? {},
             })
           })
           .catch(() => {
@@ -217,6 +350,8 @@ window.__ModuleLoader__.load({
         const next = {}
         if (key === 'enabled' || key === 'unlimited' || key === 'armTimeout') {
           next[key] = raw === true
+        } else if (key === 'jitter') {
+          next[key] = raw
         } else if (key === 'codes' || key === 'tools') {
           next[key] = typeof raw === 'string' ? raw.split(',').map((v) => v.trim()).filter(Boolean) : raw
         } else {
@@ -231,9 +366,41 @@ window.__ModuleLoader__.load({
           .catch(() => setFeedback({ state: 'failed' }))
       }
 
+      const commitOverrides = (overrides) => {
+        setDraft((current) => ({ ...current, overrides }))
+        setFeedback({ state: 'applying' })
+        Promise.resolve()
+          .then(() => props.setField('toolOverrides', overrides))
+          .then(() => setFeedback({ state: 'applied' }))
+          .catch(() => setFeedback({ state: 'failed' }))
+      }
+
+      const changeOverride = (oldTool, nextValue, newTool) => {
+        const overrides = { ...(draft.overrides ?? {}) }
+        if (newTool !== undefined) {
+          delete overrides[oldTool]
+          if (newTool.trim()) overrides[newTool.trim()] = nextValue
+        } else if (nextValue === null) {
+          delete overrides[oldTool]
+        } else {
+          overrides[oldTool] = nextValue
+        }
+        commitOverrides(overrides)
+      }
+
+      const addOverride = () => {
+        const name = newTool.trim()
+        if (!name) return
+        const overrides = { ...(draft.overrides ?? {}) }
+        if (!(name in overrides)) overrides[name] = {}
+        setNewTool('')
+        commitOverrides(overrides)
+      }
+
       const readable = status && status !== false
       const readonly = readable && props.readonly
       const unavailable = status === false
+      const overrideRows = Object.entries(draft.overrides ?? {})
 
       return h(
         'div',
@@ -256,6 +423,25 @@ window.__ModuleLoader__.load({
               ),
             ),
 
+        h('h3', { className: 'bo-sub' }, t('sessionsTitle')),
+        h('p', { className: 'bo-intro' }, t('sessionsIntro')),
+        !readable
+          ? null
+          : status.sessions.length === 0
+            ? h('p', { className: 'bo-hint' }, t('sessionEmpty'))
+            : h('div', { className: 'bo-sess' },
+                status.sessions.map((row) => {
+                  const shortId = String(row.sessionId).length > 16 ? `${String(row.sessionId).slice(0, 14)}…` : String(row.sessionId)
+                  return h('div', { key: row.sessionId, className: 'bo-sess-row' },
+                    h('b', null, shortId),
+                    h('span', null, `${row.attempts} ${t('sessionAttempts')}`),
+                    h('span', null, `${row.retries} ${t('sessionRetries')}`),
+                    h('span', null, `${row.timeouts} ${t('sessionTimeouts')}`),
+                    h('span', null, row.lastCode ?? t('noCode')),
+                  )
+                }),
+              ),
+
         h('h3', { className: 'bo-sub' }, t('configTitle')),
         h('p', { className: 'bo-intro' }, t('configIntro')),
         ...FIELD_DEFS.map((def) =>
@@ -271,6 +457,39 @@ window.__ModuleLoader__.load({
         feedback
           ? h('p', { className: 'bo-hint' }, t(feedback.state === 'applying' ? 'applying' : feedback.state === 'applied' ? 'applied' : 'failed'))
           : null,
+
+        h('h3', { className: 'bo-sub' }, t('overridesLabel')),
+        h('p', { className: 'bo-intro' }, t('overridesHint')),
+        h('div', { className: 'bo-overrides' },
+          overrideRows.map(([tool, row]) =>
+            h(OverrideRow, {
+              key: tool,
+              t,
+              tool,
+              value: row,
+              disabled: !readable || readonly,
+              onChange: (nextValue, nextTool) => changeOverride(tool, nextValue, nextTool),
+              onRemove: () => changeOverride(tool, null),
+            }),
+          ),
+        ),
+        h('div', { className: 'bo-actions' },
+          h('input', {
+            type: 'text',
+            className: 'bo-input',
+            style: { minWidth: '180px' },
+            value: newTool,
+            placeholder: t('overrideToolPlaceholder'),
+            disabled: !readable || readonly,
+            onChange: (event) => setNewTool(event.target.value),
+          }),
+          h('button', {
+            type: 'button',
+            className: 'bo-button',
+            disabled: !readable || readonly || !newTool.trim(),
+            onClick: addOverride,
+          }, t('overrideAdd')),
+        ),
 
         h('div', { className: 'bo-actions' },
           h('button', {

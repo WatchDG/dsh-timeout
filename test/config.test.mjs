@@ -2,7 +2,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { DEFAULT_CODES, normalizeConfig, snapshot } from '../lib/config.js'
+import { DEFAULT_CODES, normalizeConfig, policyFor, snapshot } from '../lib/config.js'
 
 test('defaults match the documented behavior', () => {
   const c = normalizeConfig({})
@@ -104,4 +104,72 @@ test('snapshot handles a null config', () => {
   const c = snapshot(null)
   assert.equal(c.enabled, true)
   assert.equal(c.maxAttempts, 3)
+})
+
+test('jitter defaults to equal with ±50% ratio', () => {
+  const c = normalizeConfig({})
+  assert.equal(c.jitter, 'equal')
+  assert.equal(c.jitterRatio, 0.5)
+})
+
+test('jitter mode and ratio pass through with fallback', () => {
+  assert.equal(normalizeConfig({ jitter: 'none' }).jitter, 'none')
+  assert.equal(normalizeConfig({ jitter: 'full' }).jitter, 'full')
+  assert.equal(normalizeConfig({ jitter: 'bogus' }).jitter, 'equal')
+  assert.equal(normalizeConfig({ jitterRatio: 2 }).jitterRatio, 0.5)
+  assert.equal(normalizeConfig({ jitterRatio: 0 }).jitterRatio, 0.5)
+  assert.equal(normalizeConfig({ jitterRatio: 0.25 }).jitterRatio, 0.25)
+})
+
+test('toolOverrides normalize partial entries', () => {
+  const c = normalizeConfig({
+    toolOverrides: {
+      pwsh: { maxAttempts: 5, codes: ['COMMAND_FAILED', 'tool_timeout'], jitter: 'none' },
+      bash: { unlimited: true },
+      '': { maxAttempts: 9 },
+    },
+  })
+  assert.deepEqual(c.toolOverrides.pwsh, {
+    maxAttempts: 5,
+    codes: ['COMMAND_FAILED', 'TOOL_TIMEOUT'],
+    jitter: 'none',
+  })
+  assert.deepEqual(c.toolOverrides.bash, { unlimited: true })
+  assert.equal(c.toolOverrides[''], undefined)
+  assert.equal(c.toolOverrides.pwsh.minTimeoutMs, undefined)
+})
+
+test('toolOverrides ignore invalid values but keep the tool row', () => {
+  const c = normalizeConfig({
+    toolOverrides: {
+      pwsh: { maxAttempts: 0, factor: 1, minTimeoutMs: -1, maxTimeoutMs: 50, jitterRatio: 0, codes: [] },
+    },
+  })
+  assert.deepEqual(c.toolOverrides.pwsh, {})
+  assert.equal('pwsh' in c.toolOverrides, true)
+})
+
+test('policyFor merges overrides over global values', () => {
+  const c = normalizeConfig({
+    maxAttempts: 3,
+    codes: ['TOOL_TIMEOUT'],
+    minTimeoutMs: 1000,
+    factor: 2,
+    jitter: 'equal',
+    toolOverrides: {
+      pwsh: { maxAttempts: 5, codes: ['COMMAND_FAILED'], jitter: 'full' },
+    },
+  })
+  const pwsh = policyFor(c, 'pwsh')
+  assert.equal(pwsh.maxAttempts, 5)
+  assert.deepEqual(pwsh.codes, ['COMMAND_FAILED'])
+  assert.equal(pwsh.jitter, 'full')
+  assert.equal(pwsh.minTimeoutMs, 1000)
+  assert.equal(pwsh.factor, 2)
+  assert.equal(pwsh.unlimited, false)
+  assert.equal(pwsh.armTimeout, true)
+  const bash = policyFor(c, 'bash')
+  assert.equal(bash.maxAttempts, 3)
+  assert.deepEqual(bash.codes, ['TOOL_TIMEOUT'])
+  assert.equal(bash.jitter, 'equal')
 })
