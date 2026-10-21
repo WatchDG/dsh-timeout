@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-10-21
+
+### Fixed
+
+- LLM retry chain now resets on a new turn/step (like built-in llm-retry):
+  without this, one exhausted `10/10` silently disabled all later model
+  retries for the session, leaving only the built-in `1/5` chains.
+
 ## [0.3.0] - 2026-10-21
 
 ### Added

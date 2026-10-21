@@ -1,6 +1,6 @@
 {
   "name": "dsh-timeout",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "description": "Exponential backoff retry strategy for DeepSeek Harness tool calls and model requests: configurable min/max delays, growth factor, and max-attempts or unlimited policy for tools/execute plus agent/request-error.",
