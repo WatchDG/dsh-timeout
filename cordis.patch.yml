@@ -1,4 +1,4 @@
-# dsh-timeout — exponential backoff retry strategy for tool calls.
+# dsh-timeout — exponential backoff retry strategy for tool calls + model requests.
 # Override this row in the profile's own patch layer to tune behavior, e.g.:
 #
 #   - id: backoff
@@ -12,6 +12,19 @@
 #       codes: [TOOL_TIMEOUT]      # error codes that trigger a retry; ["*"] = any
 #       tools: [pwsh, bash]        # tool names to cover; [] = all tools
 #       armTimeout: true           # enforce per-attempt tool timeoutMs deadlines
+#       llmEnabled: true           # retry model requests (Retried model request)
+#       llmUnlimited: false        # true = retry/∞ until success/interrupt
+#       llmMaxRetries: 10          # model retries after first failure
+#       llmMinTimeoutMs: 1000      # first model retry delay
+#       llmMaxTimeoutMs: 30000     # model delay ceiling (Retry-After wins within it)
+#       llmFactor: 2
+#       llmCodes: [EMPTY_RESPONSE, RATE_LIMIT, SERVER, TIMEOUT, TRANSPORT]
+# To count from this plugin only, disable the built-in executor for the route:
+#   - id: llm-pi-ai
+#     config:
+#       providers:
+#         opencode-go:
+#           retryPolicy: { mode: normal, maxRetries: 0 }
 - insert:
     - id: backoff
       name: dsh-timeout

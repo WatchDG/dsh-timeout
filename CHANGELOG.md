@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-10-21
+
+### Added
+
+- Model-request retries (`agent/request-error`): `llmEnabled` master switch,
+  `llmMaxRetries` count or `llmUnlimited` for `retry/∞`, with `llmMinTimeoutMs`,
+  `llmMaxTimeoutMs`, `llmFactor`, `llmCodes`, `llmJitter`/`llmJitterRatio`.
+  Emits chat-compatible `llm/retry` / `llm/retry-started` so the UI shows
+  `Retried model request (retry/maximum)`; honors provider `Retry-After`
+  within the ceiling and tracks durable counters via `backoffLlmRetry`.
+- Settings → Backoff: Model requests section with live `llmAttempts` /
+  `llmRetries` / `llmLastCode` counters.
+- Docs: how to count from this plugin only (provider `retryPolicy maxRetries 0`)
+  vs additive totals (built-in + plugin).
+
 ## [0.2.0] - 2026-10-21
 
 ### Added

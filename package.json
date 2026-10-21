@@ -1,9 +1,9 @@
 {
   "name": "dsh-timeout",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Exponential backoff retry strategy for DeepSeek Harness tool calls: replaces the fixed built-in timeout handling with configurable min/max delays, a growth factor, and a max-attempts or unlimited-attempts policy.",
+  "description": "Exponential backoff retry strategy for DeepSeek Harness tool calls and model requests: configurable min/max delays, growth factor, and max-attempts or unlimited policy for tools/execute plus agent/request-error.",
   "license": "Apache-2.0",
   "author": "Baranov Grigoriy Vladimirovich",
   "homepage": "https://github.com/WatchDG/dsh-timeout#readme",
@@ -49,8 +49,8 @@
     "NOTICE"
   ],
   "scripts": {
-    "test": "node --test test/config.test.mjs test/backoff.test.mjs test/plugin.test.mjs test/manifest.test.mjs",
-    "test:unit": "node --test test/config.test.mjs test/backoff.test.mjs test/plugin.test.mjs test/manifest.test.mjs",
+    "test": "node --test test/config.test.mjs test/backoff.test.mjs test/llm.test.mjs test/plugin.test.mjs test/manifest.test.mjs",
+    "test:unit": "node --test test/config.test.mjs test/backoff.test.mjs test/llm.test.mjs test/plugin.test.mjs test/manifest.test.mjs",
     "pack:check": "npm pack --dry-run"
   },
   "dsh": {

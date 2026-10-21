@@ -121,6 +121,15 @@ or edit it live on the **Settings → Backoff** page.
 | `jitter` | `'none' \| 'equal' \| 'full'` | `'equal'` | Delay randomization: fixed, ±ratio centered, or uniform 0..base. |
 | `jitterRatio` | number | `0.5` | Spread for `equal` jitter (±50 %). |
 | `toolOverrides` | object | `{}` | Per-tool partial overrides; unset fields inherit globals. |
+| `llmEnabled` | boolean | `false` | Retry model requests (`Retried model request` in chat). |
+| `llmUnlimited` | boolean | `false` | Unlimited model retries (`retry/∞`). |
+| `llmMaxRetries` | number | `10` | Model retries after first failure. Ignored when `llmUnlimited`. |
+| `llmMinTimeoutMs` | number | `1000` | First model retry delay. |
+| `llmMaxTimeoutMs` | number | `30000` | Model delay ceiling; provider `Retry-After` within it wins. |
+| `llmFactor` | number | `2` | Model delay growth factor. |
+| `llmCodes` | string[] | `[EMPTY_RESPONSE,RATE_LIMIT,SERVER,TIMEOUT,TRANSPORT]` | Model codes to retry; `["*"]` = any. |
+| `llmJitter` | `'none' \| 'equal' \| 'full'` | `'equal'` | Model delay randomization. |
+| `llmJitterRatio` | number | `0.2` | Spread for model `equal` jitter (±20 %). |
 
 ```yaml
 - id: backoff
@@ -142,6 +151,39 @@ or edit it live on the **Settings → Backoff** page.
         codes: [TOOL_TIMEOUT, COMMAND_FAILED]
       web_fetch:
         unlimited: true     # retry web fetches until success
+    llmEnabled: true        # retry Connection error (TRANSPORT) etc.
+    llmMaxRetries: 10
+    llmUnlimited: false     # true = retry/∞ until success or interrupt
+    llmMinTimeoutMs: 1000
+    llmMaxTimeoutMs: 30000
+    llmCodes: [EMPTY_RESPONSE, RATE_LIMIT, SERVER, TIMEOUT, TRANSPORT]
+```
+
+### Model requests (`Retried model request`)
+
+Tools and models are fully independent, each on its own: tools via
+`enabled/maxAttempts/unlimited/...`, models via
+`llmEnabled/llmMaxRetries/llmUnlimited/...`. Turning tools off does not
+stop model retries and vice versa.
+
+`Retried model request (retry/maximum)` is the built-in `dsh-llm-retry`
+executor plus each provider's `retryPolicy` (default: 5 retries for
+`EMPTY_RESPONSE,RATE_LIMIT,SERVER,TIMEOUT,TRANSPORT`). `Connection error`
+is `TRANSPORT`, so 5 retries then `This turn failed` is the expected
+default.
+
+This plugin adds its own `agent/request-error` listener when `llmEnabled`
+is on, emitting the same `llm/retry` events so chat renders identically
+(`retry/∞` when `llmUnlimited`). Totals add up when both executors are on
+(built-in + this plugin); to count from this plugin only, disable the
+built-in route:
+
+```yaml
+- id: llm-pi-ai
+  config:
+    providers:
+      opencode-go:
+        retryPolicy: { mode: normal, maxRetries: 0 }
 ```
 
 ## Safety notes

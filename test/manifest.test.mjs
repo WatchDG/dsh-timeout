@@ -106,6 +106,6 @@ test('the plugin entry point exports the Host plugin contract', async () => {
   const module = await import('../index.js')
   assert.equal(typeof module.apply, 'function')
   assert.equal(module.name, 'backoff')
-  assert.deepEqual(module.inject, ['tools'])
+  assert.deepEqual(module.inject, ['tools', 'agents', 'sessionProjections'])
   assert.equal(module.Config?.type, 'object', 'settings service reads Config')
 })

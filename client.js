@@ -22,13 +22,16 @@ window.__ModuleLoader__.load({
       nav: 'Backoff',
       title: 'Exponential backoff',
       intro:
-        'Retries failed tool calls — including calls that hit their deadline — with an exponential backoff: delay = min(maxTimeoutMs, minTimeoutMs × factor^(attempt−1)). The strategy applies inside one tool dispatch, so pre-execution checks and approvals run once, and only the final result reaches the model.',
+        'Retries failed tool calls — including calls that hit their deadline — with an exponential backoff: delay = min(maxTimeoutMs, minTimeoutMs × factor^(attempt−1)). The strategy applies inside one tool dispatch, so pre-execution checks and approvals run once, and only the final result reaches the model. The Model section below retries failed model requests (Retried model request) with the same math, rendered as retry/maximum in chat.',
       statusTitle: 'Live counters',
       statusIntro: 'Since the Host loaded this plugin. Counters are per-Host, not per-session.',
       attempts: 'dispatching attempts',
       retries: 'retries issued',
       timeouts: 'deadline hits',
       lastCode: 'last error code',
+      llmAttempts: 'model attempts',
+      llmRetries: 'model retries',
+      llmLastCode: 'last model code',
       noCode: 'none yet',
       sessionsTitle: 'Per-session activity',
       sessionsIntro: 'Calls that carried an agent, broken down by session. Top activity first.',
@@ -38,10 +41,10 @@ window.__ModuleLoader__.load({
       sessionRetries: 'retries',
       sessionTimeouts: 'timeouts',
       sessionLastCode: 'last code',
-      configTitle: 'Behavior',
-      configIntro: 'Applies immediately, without a restart.',
-      enabledLabel: 'Enabled',
-      enabledHint: 'When off, every tool call dispatches exactly once, as DSH does by default.',
+      configTitle: 'Tools',
+      configIntro: 'Tool retries only. Applies immediately, without a restart. Independent from Model requests below.',
+      enabledLabel: 'Enabled (tools)',
+      enabledHint: 'When off, every tool call dispatches exactly once, as DSH does by default. Does not affect model retries.',
       unlimitedLabel: 'Unlimited attempts',
       unlimitedHint: 'Ignore max attempts and keep retrying until a call succeeds or you interrupt it. Waits grow up to the max timeout, so an always-failing call keeps pinging.',
       maxAttemptsLabel: 'Max attempts',
@@ -70,6 +73,26 @@ window.__ModuleLoader__.load({
       overrideToolPlaceholder: 'tool name, e.g. pwsh',
       overrideAdd: 'Add tool',
       overrideRemove: 'Remove',
+      llmTitle: 'Model requests',
+      llmIntro: 'Model retries only. Independent from Tools above: own switch, count/unlimited, delays and codes. Retries failed model requests (Retried model request in chat). Unlimited = retry/∞ until success or interrupt; otherwise retry/maxRetries. To control counts from here only, disable the built-in executor for the route (provider retryPolicy maxRetries 0) — otherwise totals add up (built-in + this plugin).',
+      llmEnabledLabel: 'Enabled (models)',
+      llmEnabledHint: 'When on, Connection error (TRANSPORT) and other selected codes are retried with backoff instead of failing the turn after the built-in budget. Works even when Tools are off.',
+      llmUnlimitedLabel: 'Unlimited model retries',
+      llmUnlimitedHint: 'Ignore max retries and keep retrying until success or you interrupt it. Each retry is billed as a new request.',
+      llmMaxRetriesLabel: 'Max model retries',
+      llmMaxRetriesHint: 'Retries after the first failure (5 = built-in default; 10 = longer for flaky networks). Ignored when unlimited.',
+      llmMinTimeoutMsLabel: 'Min model delay (ms)',
+      llmMinTimeoutMsHint: 'First model retry delay.',
+      llmMaxTimeoutMsLabel: 'Max model delay (ms)',
+      llmMaxTimeoutMsHint: 'Model delay ceiling; below min is raised to min. Provider Retry-After within the ceiling wins.',
+      llmFactorLabel: 'Model factor',
+      llmFactorHint: 'Model delay grows by this factor per retry (> 1).',
+      llmCodesLabel: 'Model retry codes',
+      llmCodesHint: 'Comma-separated, e.g. TRANSPORT, TIMEOUT, SERVER, RATE_LIMIT, EMPTY_RESPONSE. Use * for any failure.',
+      llmJitterLabel: 'Model jitter',
+      llmJitterHint: 'Equal ±ratio is the built-in style; None = fixed; Full = 0..base.',
+      llmJitterRatioLabel: 'Model jitter ratio',
+      llmJitterRatioHint: 'Spread for Equal: 0.2 = ±20%.',
       applying: 'Applying…',
       applied: 'Applied.',
       failed: 'The Host did not accept this value; the field was left unchanged.',
@@ -84,13 +107,16 @@ window.__ModuleLoader__.load({
       nav: 'Бэкoфф',
       title: 'Экспоненциальный бэкoфф',
       intro:
-        'Повторяет упавшие вызовы инструментов — включая вызовы, упёршиеся в таймаут, — с экспоненциальной задержкой: delay = min(maxTimeoutMs, minTimeoutMs × factor^(попытка−1)). Стратегия работает внутри одного вызова: проверки перед выполнением и подтверждения проходят один раз, а модель видит только итоговый результат.',
+        'Повторяет упавшие вызовы инструментов — включая вызовы, упёршиеся в таймаут, — с экспоненциальной задержкой: delay = min(maxTimeoutMs, minTimeoutMs × factor^(попытка−1)). Стратегия работает внутри одного вызова: проверки перед выполнением и подтверждения проходят один раз, а модель видит только итоговый результат. Раздел «Модель» ниже повторяет упавшие запросы к модели (Retried model request) по той же математике, в чате видно как retry/maximum.',
       statusTitle: 'Живые счётчики',
       statusIntro: 'С момента загрузки плагина хостом. Счётчики общие для хоста, а не на сессию.',
       attempts: 'попыток запуска',
       retries: 'повторных попыток',
       timeouts: 'срабатываний таймаута',
       lastCode: 'последний код ошибки',
+      llmAttempts: 'запросов к модели',
+      llmRetries: 'повторов модели',
+      llmLastCode: 'последний код модели',
       noCode: 'пока нет',
       sessionsTitle: 'Активность по сессиям',
       sessionsIntro: 'Вызовы с агентом, разбитые по сессиям. Сначала самые активные.',
@@ -100,10 +126,10 @@ window.__ModuleLoader__.load({
       sessionRetries: 'повторов',
       sessionTimeouts: 'таймаутов',
       sessionLastCode: 'последний код',
-      configTitle: 'Поведение',
-      configIntro: 'Применяется сразу, без перезапуска.',
-      enabledLabel: 'Включён',
-      enabledHint: 'При выключении каждый вызов запускается ровно один раз, как в DSH по умолчанию.',
+      configTitle: 'Инструменты',
+      configIntro: 'Только повторы инструментов. Применяется сразу, без перезапуска. Независимо от раздела «Модель» ниже.',
+      enabledLabel: 'Включён (инструменты)',
+      enabledHint: 'При выключении каждый вызов запускается ровно один раз, как в DSH по умолчанию. На повторы модели не влияет.',
       unlimitedLabel: 'Без ограничения попыток',
       unlimitedHint: 'Игнорировать максимум попыток и повторять, пока вызов не пройдёт или вы не прервёте его. Задержки растут до максимума, поэтому вечно падающий вызов будет повторяться.',
       maxAttemptsLabel: 'Максимум попыток',
@@ -132,6 +158,26 @@ window.__ModuleLoader__.load({
       overrideToolPlaceholder: 'имя инструмента, например pwsh',
       overrideAdd: 'Добавить инструмент',
       overrideRemove: 'Удалить',
+      llmTitle: 'Запросы к модели',
+      llmIntro: 'Только повторы модели. Независимо от Инструментов выше: свой тумблер, кол-во/безлимит, задержки и коды. Повторяет упавшие запросы к модели (Retried model request в чате). Без ограничения = retry/∞ до успеха или прерывания; иначе retry/maxRetries. Чтобы счёт вёл только этот плагин, отключите встроенный исполнитель для маршрута (retryPolicy maxRetries 0 у провайдера) — иначе итоги складываются (встроенный + этот плагин).',
+      llmEnabledLabel: 'Включён (модель)',
+      llmEnabledHint: 'Когда включено, Connection error (TRANSPORT) и другие выбранные коды повторяются с задержкой, а не роняют ход после встроенного бюджета. Работает, даже когда Инструменты выключены.',
+      llmUnlimitedLabel: 'Без ограничения повторов модели',
+      llmUnlimitedHint: 'Игнорировать максимум и повторять до успеха или прерывания. Каждый повтор — новый биллингуемый запрос.',
+      llmMaxRetriesLabel: 'Максимум повторов модели',
+      llmMaxRetriesHint: 'Повторов после первой ошибки (5 = встроенный дефолт; 10 = дольше для нестабильной сети). Игнорируется при безлимите.',
+      llmMinTimeoutMsLabel: 'Мин. задержка модели (мс)',
+      llmMinTimeoutMsHint: 'Задержка первого повтора модели.',
+      llmMaxTimeoutMsLabel: 'Макс. задержка модели (мс)',
+      llmMaxTimeoutMsHint: 'Потолок задержки; ниже минимума поднимается до него. Валидный Retry-After провайдера в пределах потолка побеждает.',
+      llmFactorLabel: 'Фактор модели',
+      llmFactorHint: 'Задержка модели растёт на этот множитель с каждой попыткой (> 1).',
+      llmCodesLabel: 'Коды повтора модели',
+      llmCodesHint: 'Через запятую, например TRANSPORT, TIMEOUT, SERVER, RATE_LIMIT, EMPTY_RESPONSE. * — любая ошибка.',
+      llmJitterLabel: 'Джиттер модели',
+      llmJitterHint: 'Equal ±ratio — встроенный стиль; None — фиксированно; Full — 0..base.',
+      llmJitterRatioLabel: 'Доля джиттера модели',
+      llmJitterRatioHint: 'Разброс для Equal: 0.2 = ±20%.',
       applying: 'Применяю…',
       applied: 'Применено.',
       failed: 'Хост не принял значение; поле осталось прежним.',
@@ -190,6 +236,19 @@ window.__ModuleLoader__.load({
       { key: 'jitterRatio', kind: 'number' },
     ]
 
+    /** Model-request retry fields (llm* in the Host config). */
+    const LLM_FIELD_DEFS = [
+      { key: 'llmEnabled', kind: 'boolean' },
+      { key: 'llmUnlimited', kind: 'boolean' },
+      { key: 'llmMaxRetries', kind: 'number' },
+      { key: 'llmMinTimeoutMs', kind: 'number' },
+      { key: 'llmMaxTimeoutMs', kind: 'number' },
+      { key: 'llmFactor', kind: 'number' },
+      { key: 'llmCodes', kind: 'csv' },
+      { key: 'llmJitter', kind: 'select' },
+      { key: 'llmJitterRatio', kind: 'number' },
+    ]
+
     /** Fields available inside each per-tool override row. */
     const OVERRIDE_FIELD_DEFS = [
       { key: 'maxAttempts', kind: 'number' },
@@ -230,13 +289,16 @@ window.__ModuleLoader__.load({
           ),
         )
       } else if (def.kind === 'number') {
+        const isFactor = def.key === 'factor' || def.key === 'llmFactor'
+        const isRatio = def.key === 'jitterRatio' || def.key === 'llmJitterRatio'
+        const isLlmRetries = def.key === 'llmMaxRetries'
         control = h('input', {
           type: 'number',
           className: 'bo-input',
           value: value === undefined ? '' : String(value),
-          min: def.key === 'factor' ? 1.01 : def.key === 'jitterRatio' ? 0.01 : 1,
-          max: def.key === 'jitterRatio' ? 1 : undefined,
-          step: def.key === 'factor' ? 0.1 : def.key === 'jitterRatio' ? 0.05 : 1,
+          min: isFactor ? 1.01 : isRatio ? 0 : isLlmRetries ? 0 : 1,
+          max: isRatio ? 1 : undefined,
+          step: isFactor ? 0.1 : isRatio ? 0.05 : 1,
           disabled,
           onChange: (event) => onChange(event.target.value),
         })
@@ -252,7 +314,7 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'bo-row' },
         def.kind === 'boolean' ? null : h('label', { className: 'bo-label' }, label),
         control,
-        hint ? h('div', { className: 'bo-hint' }, hint) : null,
+        hint && hint !== `${def.key}Hint` ? h('div', { className: 'bo-hint' }, hint) : null,
       )
     }
 
@@ -336,6 +398,15 @@ window.__ModuleLoader__.load({
               jitter: payload.settings.jitter,
               jitterRatio: payload.settings.jitterRatio,
               overrides: payload.settings.toolOverrides ?? {},
+              llmEnabled: payload.settings.llmEnabled,
+              llmUnlimited: payload.settings.llmUnlimited,
+              llmMaxRetries: payload.settings.llmMaxRetries,
+              llmMinTimeoutMs: payload.settings.llmMinTimeoutMs,
+              llmMaxTimeoutMs: payload.settings.llmMaxTimeoutMs,
+              llmFactor: payload.settings.llmFactor,
+              llmCodes: payload.settings.llmCodes,
+              llmJitter: payload.settings.llmJitter,
+              llmJitterRatio: payload.settings.llmJitterRatio,
             })
           })
           .catch(() => {
@@ -348,11 +419,11 @@ window.__ModuleLoader__.load({
 
       const commit = (key, raw) => {
         const next = {}
-        if (key === 'enabled' || key === 'unlimited' || key === 'armTimeout') {
+        if (key === 'enabled' || key === 'unlimited' || key === 'armTimeout' || key === 'llmEnabled' || key === 'llmUnlimited') {
           next[key] = raw === true
-        } else if (key === 'jitter') {
+        } else if (key === 'jitter' || key === 'llmJitter') {
           next[key] = raw
-        } else if (key === 'codes' || key === 'tools') {
+        } else if (key === 'codes' || key === 'tools' || key === 'llmCodes') {
           next[key] = typeof raw === 'string' ? raw.split(',').map((v) => v.trim()).filter(Boolean) : raw
         } else {
           const number = Number(raw)
@@ -421,6 +492,12 @@ window.__ModuleLoader__.load({
                 h('b', null, status.stats.lastCode ?? t('noCode')),
                 h('span', null, t('lastCode')),
               ),
+              h('div', { className: 'bo-stat' }, h('b', null, status.stats.llmAttempts ?? 0), h('span', null, t('llmAttempts'))),
+              h('div', { className: 'bo-stat' }, h('b', null, status.stats.llmRetries ?? 0), h('span', null, t('llmRetries'))),
+              h('div', { className: 'bo-stat' },
+                h('b', null, status.stats.llmLastCode ?? t('noCode')),
+                h('span', null, t('llmLastCode')),
+              ),
             ),
 
         h('h3', { className: 'bo-sub' }, t('sessionsTitle')),
@@ -457,6 +534,19 @@ window.__ModuleLoader__.load({
         feedback
           ? h('p', { className: 'bo-hint' }, t(feedback.state === 'applying' ? 'applying' : feedback.state === 'applied' ? 'applied' : 'failed'))
           : null,
+
+        h('h3', { className: 'bo-sub' }, t('llmTitle')),
+        h('p', { className: 'bo-intro' }, t('llmIntro')),
+        ...LLM_FIELD_DEFS.map((def) =>
+          h(Field, {
+            key: def.key,
+            t,
+            def,
+            value: draft[def.key],
+            disabled: !readable || readonly,
+            onChange: (raw) => commit(def.key, raw),
+          }),
+        ),
 
         h('h3', { className: 'bo-sub' }, t('overridesLabel')),
         h('p', { className: 'bo-intro' }, t('overridesHint')),
