@@ -1,0 +1,17 @@
+# dsh-timeout — exponential backoff retry strategy for tool calls.
+# Override this row in the profile's own patch layer to tune behavior, e.g.:
+#
+#   - id: backoff
+#     config:
+#       enabled: true              # master switch
+#       maxAttempts: 3             # attempts per call (ignored when unlimited)
+#       unlimited: false           # true = retry forever until success/interrupt
+#       minTimeoutMs: 1000         # first retry delay
+#       maxTimeoutMs: 60000        # delay ceiling
+#       factor: 2                  # delay grows by this factor per retry
+#       codes: [TOOL_TIMEOUT]      # error codes that trigger a retry; ["*"] = any
+#       tools: [pwsh, bash]        # tool names to cover; [] = all tools
+#       armTimeout: true           # enforce per-attempt tool timeoutMs deadlines
+- insert:
+    - id: backoff
+      name: dsh-timeout

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Exponential Backoff Retry",
+    "description": "Retries failed tool calls with an exponential backoff: configurable min/max delays, growth factor, and maximum attempts (or unlimited). Per-attempt deadlines turn hung calls into retryable timeouts."
+  }
+}

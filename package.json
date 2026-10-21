@@ -1,0 +1,70 @@
+{
+  "name": "dsh-timeout",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Exponential backoff retry strategy for DeepSeek Harness tool calls: replaces the fixed built-in timeout handling with configurable min/max delays, a growth factor, and a max-attempts or unlimited-attempts policy.",
+  "license": "Apache-2.0",
+  "author": "Baranov Grigoriy Vladimirovich",
+  "homepage": "https://github.com/WatchDG/dsh-timeout#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WatchDG/dsh-timeout.git"
+  },
+  "bugs": {
+    "url": "https://github.com/WatchDG/dsh-timeout/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "timeout",
+    "retry",
+    "backoff",
+    "exponential-backoff",
+    "cordis"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/*.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.ru.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "test": "node --test test/config.test.mjs test/backoff.test.mjs test/plugin.test.mjs test/manifest.test.mjs",
+    "test:unit": "node --test test/config.test.mjs test/backoff.test.mjs test/plugin.test.mjs test/manifest.test.mjs",
+    "pack:check": "npm pack --dry-run"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "~3.18.5"
+  }
+}
