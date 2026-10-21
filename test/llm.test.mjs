@@ -151,6 +151,41 @@ test('exhausted budget delegates downstream', async () => {
   assert.equal(nextCalls, 1)
 })
 
+test('new turn/step starts a new chain (reset like built-in)', async () => {
+  const { agent, events } = makeAgent()
+  const stats = { llmAttempts: 0, llmRetries: 0, llmLastCode: null }
+  const memory = {}
+  const recover = createRecoverWithBackoff({
+    readSettings: () => normalizeConfig({ llmEnabled: true, llmMaxRetries: 1 }),
+    delay: IMMEDIATE,
+    random: () => 0.5,
+    stats,
+    getState: () => memory,
+    onScheduled: (session, key, entry) => { memory[key] = entry },
+  })
+  const first = await recover(
+    { ...payloadFor(agent, { code: 'TRANSPORT', message: 'x' }), turn: 't1', step: 's1' },
+    async () => undefined,
+  )
+  assert.deepEqual(first, { kind: 'retry' })
+  // Same step, budget exhausted -> delegate.
+  let nextCalls = 0
+  const exhausted = await recover(
+    { ...payloadFor(agent, { code: 'TRANSPORT', message: 'x' }), turn: 't1', step: 's1' },
+    async () => { nextCalls += 1; return undefined },
+  )
+  assert.equal(exhausted, undefined)
+  assert.equal(nextCalls, 1)
+  // New step -> fresh chain, retries again with a new id.
+  const fresh = await recover(
+    { ...payloadFor(agent, { code: 'TRANSPORT', message: 'x' }), turn: 't1', step: 's2' },
+    async () => undefined,
+  )
+  assert.deepEqual(fresh, { kind: 'retry' })
+  assert.equal(events.filter((e) => e.type === 'llm/retry').length, 2)
+  assert.notEqual(events[0].data.retryId, events[2].data.retryId)
+})
+
 test('unlimited maps to always mode with retry/∞', async () => {
   const { agent, events } = makeAgent()
   const stats = { llmAttempts: 0, llmRetries: 0, llmLastCode: null }
