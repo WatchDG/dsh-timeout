@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-10-27
+
+### Fixed
+
+- Settings → Backoff: per-session activity now renders the model counters
+  (`llmAttempts`/`llmRetries`/`llmLastCode`) alongside the tool counters.
+  Previously a session with real model retries showed `retries: 0`, because the
+  table only displayed tool retries even though `GET /backoff/status` already
+  served the model counters per session.
+- Live counters now re-read `GET /backoff/status` every 3 s while the section is
+  open (and when the tab becomes visible) instead of only on mount, so retries
+  that happen after the page loaded are no longer displayed as stale zeros.
+- Counter labels now state explicitly whether a number is a tool counter or a
+  model counter (`tool attempts`, `tool retries`, `model retries`, …).
+
 ## [0.3.1] - 2026-10-21
 
 ### Fixed
