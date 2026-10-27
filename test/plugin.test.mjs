@@ -4,7 +4,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { policyFor, snapshot } from '../lib/config.js'
-import { RETRY_EVENT, RETRY_STARTED_EVENT, STATUS_PATH, createExecuteWithBackoff, mount } from '../lib/plugin.js'
+import { RETRY_EVENT, RETRY_STARTED_EVENT, STATUS_PATH, createExecuteWithBackoff, mount, statusView } from '../lib/plugin.js'
 
 const SUCCESS = { isError: false, value: { ok: true } }
 const FAIL = (code) => ({ isError: true, error: { message: 'boom', info: code ? { code } : undefined } })
@@ -289,6 +289,35 @@ test('per-session counters accumulate in the sessions map', async () => {
   assert.equal(record.retries, 2)
   assert.equal(record.timeouts, 0)
   assert.equal(record.lastCode, 'TOOL_TIMEOUT')
+})
+
+test('statusView exposes model retry counters per session, not only globally', () => {
+  const sessions = new Map([
+    ['s1', { attempts: 3, retries: 0, timeouts: 0, lastCode: 'SEARCH_FAILED', llmAttempts: 5, llmRetries: 4, llmLastCode: 'TRANSPORT' }],
+    // Legacy record without llm fields: must be repaired, not rendered as NaN.
+    ['s2', { attempts: 1, retries: 0, timeouts: 0, lastCode: null }],
+  ])
+  const stats = { attempts: 4, retries: 0, timeouts: 0, lastCode: 'SEARCH_FAILED', llmAttempts: 5, llmRetries: 4, llmLastCode: 'TRANSPORT' }
+  const view = statusView(snapshot({}), stats, sessions)
+  assert.equal(view.stats.llmRetries, 4)
+  const row = view.sessions.find((entry) => entry.sessionId === 's1')
+  assert.equal(row.retries, 0)
+  assert.equal(row.llmAttempts, 5)
+  assert.equal(row.llmRetries, 4)
+  assert.equal(row.llmLastCode, 'TRANSPORT')
+  const legacy = view.sessions.find((entry) => entry.sessionId === 's2')
+  assert.equal(legacy.llmAttempts, 0)
+  assert.equal(legacy.llmRetries, 0)
+  assert.equal(legacy.llmLastCode, null)
+})
+
+test('statusView orders sessions by combined tool and model activity', () => {
+  const sessions = new Map([
+    ['tool-heavy', { attempts: 10, retries: 0, timeouts: 0, lastCode: null }],
+    ['model-heavy', { attempts: 1, retries: 0, timeouts: 0, lastCode: null, llmAttempts: 20, llmRetries: 19, llmLastCode: 'TRANSPORT' }],
+  ])
+  const view = statusView(snapshot({}), { attempts: 11, retries: 0, timeouts: 0, lastCode: null }, sessions)
+  assert.deepEqual(view.sessions.map((row) => row.sessionId), ['model-heavy', 'tool-heavy'])
 })
 
 test('mount registers the tools/execute listener and dispatches through it', async () => {

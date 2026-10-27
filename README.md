@@ -95,10 +95,13 @@ for genuinely slow or momentarily unavailable work.
 
 **Settings → Backoff** shows:
 
-- **Live counters** — dispatching attempts, retries issued, deadline hits, and
-  the last error code, since the Host loaded the plugin (`GET /backoff/status`).
-- **Per-session activity** — the same counters broken down by session, top
-  activity first.
+- **Live counters** — tool attempts, tool retries, tool deadline hits and their
+  last code, plus model attempts, model retries and the last model code, since
+  the Host loaded the plugin (`GET /backoff/status`). The counters re-read the
+  route while the section is open, so retries that happen after it was opened
+  show up without pressing **Refresh**.
+- **Per-session activity** — the same tool *and* model counters broken down by
+  session, top activity first.
 - **Behavior** — the configuration below, editable in place with no restart via
   volatile fields, including jitter and per-tool overrides.
 

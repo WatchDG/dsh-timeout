@@ -102,6 +102,16 @@ test('the changelog documents the current version', () => {
   assert.match(read('CHANGELOG.md'), new RegExp(`## \\[${pkg.version.replaceAll('.', '\\.')}\\]`))
 })
 
+test('the settings page renders per-session model counters and keeps status live', () => {
+  const client = read('client.js')
+  for (const key of ['sessionLlmAttempts', 'sessionLlmRetries', 'sessionLlmLastCode']) {
+    assert.equal(client.split(`${key}:`).length - 1, 2, `${key} is defined in both dictionaries`)
+    assert.equal(client.split(`t('${key}')`).length - 1, 1, `${key} is rendered in the session rows`)
+  }
+  assert.match(client, /STATUS_POLL_MS/)
+  assert.match(client, /setInterval\(refresh, STATUS_POLL_MS\)/)
+})
+
 test('the plugin entry point exports the Host plugin contract', async () => {
   const module = await import('../index.js')
   assert.equal(typeof module.apply, 'function')

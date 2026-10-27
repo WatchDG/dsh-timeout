@@ -49,8 +49,8 @@
     "NOTICE"
   ],
   "scripts": {
-    "test": "node --test test/config.test.mjs test/backoff.test.mjs test/llm.test.mjs test/plugin.test.mjs test/manifest.test.mjs",
-    "test:unit": "node --test test/config.test.mjs test/backoff.test.mjs test/llm.test.mjs test/plugin.test.mjs test/manifest.test.mjs",
+    "test": "node --test test/config.test.mjs test/backoff.test.mjs test/llm.test.mjs test/plugin.test.mjs test/client.test.mjs test/manifest.test.mjs",
+    "test:unit": "node --test test/config.test.mjs test/backoff.test.mjs test/llm.test.mjs test/plugin.test.mjs test/client.test.mjs test/manifest.test.mjs",
     "pack:check": "npm pack --dry-run"
   },
   "dsh": {

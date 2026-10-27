@@ -24,23 +24,27 @@ window.__ModuleLoader__.load({
       intro:
         'Retries failed tool calls — including calls that hit their deadline — with an exponential backoff: delay = min(maxTimeoutMs, minTimeoutMs × factor^(attempt−1)). The strategy applies inside one tool dispatch, so pre-execution checks and approvals run once, and only the final result reaches the model. The Model section below retries failed model requests (Retried model request) with the same math, rendered as retry/maximum in chat.',
       statusTitle: 'Live counters',
-      statusIntro: 'Since the Host loaded this plugin. Counters are per-Host, not per-session.',
-      attempts: 'dispatching attempts',
-      retries: 'retries issued',
-      timeouts: 'deadline hits',
-      lastCode: 'last error code',
+      statusIntro:
+        'Since the Host loaded this plugin; refreshed while this section is open. Counters are per-Host, not per-session. Tool calls and model requests are counted separately.',
+      attempts: 'tool attempts',
+      retries: 'tool retries',
+      timeouts: 'tool timeout hits',
+      lastCode: 'last tool code',
       llmAttempts: 'model attempts',
       llmRetries: 'model retries',
       llmLastCode: 'last model code',
       noCode: 'none yet',
       sessionsTitle: 'Per-session activity',
-      sessionsIntro: 'Calls that carried an agent, broken down by session. Top activity first.',
+      sessionsIntro: 'Tool calls and model requests that carried an agent, broken down by session. Top activity first.',
       sessionEmpty: 'No retained calls yet.',
       sessionId: 'Session',
-      sessionAttempts: 'attempts',
-      sessionRetries: 'retries',
-      sessionTimeouts: 'timeouts',
-      sessionLastCode: 'last code',
+      sessionAttempts: 'tool attempts',
+      sessionRetries: 'tool retries',
+      sessionTimeouts: 'tool timeouts',
+      sessionLastCode: 'last tool code',
+      sessionLlmAttempts: 'model attempts',
+      sessionLlmRetries: 'model retries',
+      sessionLlmLastCode: 'last model code',
       configTitle: 'Tools',
       configIntro: 'Tool retries only. Applies immediately, without a restart. Independent from Model requests below.',
       enabledLabel: 'Enabled (tools)',
@@ -109,23 +113,27 @@ window.__ModuleLoader__.load({
       intro:
         'Повторяет упавшие вызовы инструментов — включая вызовы, упёршиеся в таймаут, — с экспоненциальной задержкой: delay = min(maxTimeoutMs, minTimeoutMs × factor^(попытка−1)). Стратегия работает внутри одного вызова: проверки перед выполнением и подтверждения проходят один раз, а модель видит только итоговый результат. Раздел «Модель» ниже повторяет упавшие запросы к модели (Retried model request) по той же математике, в чате видно как retry/maximum.',
       statusTitle: 'Живые счётчики',
-      statusIntro: 'С момента загрузки плагина хостом. Счётчики общие для хоста, а не на сессию.',
-      attempts: 'попыток запуска',
-      retries: 'повторных попыток',
-      timeouts: 'срабатываний таймаута',
-      lastCode: 'последний код ошибки',
+      statusIntro:
+        'С момента загрузки плагина хостом; обновляются, пока раздел открыт. Счётчики общие для хоста, а не на сессию. Инструменты и запросы к модели считаются отдельно.',
+      attempts: 'попыток инструментов',
+      retries: 'повторов инструментов',
+      timeouts: 'таймаутов инструментов',
+      lastCode: 'последний код инструмента',
       llmAttempts: 'запросов к модели',
       llmRetries: 'повторов модели',
       llmLastCode: 'последний код модели',
       noCode: 'пока нет',
       sessionsTitle: 'Активность по сессиям',
-      sessionsIntro: 'Вызовы с агентом, разбитые по сессиям. Сначала самые активные.',
+      sessionsIntro: 'Вызовы инструментов и запросы к модели с агентом, разбитые по сессиям. Сначала самые активные.',
       sessionEmpty: 'Вызовов с агентом пока не было.',
       sessionId: 'Сессия',
-      sessionAttempts: 'попыток',
-      sessionRetries: 'повторов',
-      sessionTimeouts: 'таймаутов',
-      sessionLastCode: 'последний код',
+      sessionAttempts: 'попыток инструментов',
+      sessionRetries: 'повторов инструментов',
+      sessionTimeouts: 'таймаутов инструментов',
+      sessionLastCode: 'последний код инструмента',
+      sessionLlmAttempts: 'запросов к модели',
+      sessionLlmRetries: 'повторов модели',
+      sessionLlmLastCode: 'последний код модели',
       configTitle: 'Инструменты',
       configIntro: 'Только повторы инструментов. Применяется сразу, без перезапуска. Независимо от раздела «Модель» ниже.',
       enabledLabel: 'Включён (инструменты)',
@@ -210,9 +218,9 @@ window.__ModuleLoader__.load({
 .bo-stat b{font-size:15px;font-weight:600}
 .bo-stat span{font-size:11px;color:var(--dsw-alias-label-secondary)}
 .bo-sess{display:flex;flex-direction:column;gap:6px}
-.bo-sess-row{display:grid;grid-template-columns:minmax(120px,1.4fr) repeat(3,minmax(60px,.6fr)) minmax(80px,.9fr);gap:8px;align-items:center;padding:8px 10px;border:.5px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1);font-size:12px;line-height:16px}
-.bo-sess-row b{font-weight:600}
-.bo-sess-row span{color:var(--dsw-alias-label-secondary)}
+.bo-sess-item{display:flex;flex-direction:column;gap:4px;padding:8px 10px;border:.5px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-1);font-size:12px;line-height:16px}
+.bo-sess-item b{font-weight:600}
+.bo-sess-line{display:flex;flex-wrap:wrap;gap:4px 12px;color:var(--dsw-alias-label-secondary);font-size:11px;line-height:16px}
 .bo-overrides{display:flex;flex-direction:column;gap:12px}
 .bo-override{border:.5px solid var(--dsw-alias-border-l1);border-radius:8px;padding:10px 12px;background:var(--dsw-alias-bg-layer-1);display:flex;flex-direction:column;gap:10px}
 .bo-override-head{display:flex;align-items:center;gap:8px}
@@ -368,6 +376,36 @@ window.__ModuleLoader__.load({
       )
     }
 
+    /** Map a status payload onto the editable draft fields. */
+    function draftFrom(payload) {
+      return {
+        enabled: payload.enabled,
+        unlimited: payload.settings.unlimited,
+        maxAttempts: payload.settings.maxAttempts,
+        minTimeoutMs: payload.settings.minTimeoutMs,
+        maxTimeoutMs: payload.settings.maxTimeoutMs,
+        factor: payload.settings.factor,
+        codes: payload.settings.codes,
+        tools: payload.settings.tools,
+        armTimeout: payload.settings.armTimeout,
+        jitter: payload.settings.jitter,
+        jitterRatio: payload.settings.jitterRatio,
+        overrides: payload.settings.toolOverrides ?? {},
+        llmEnabled: payload.settings.llmEnabled,
+        llmUnlimited: payload.settings.llmUnlimited,
+        llmMaxRetries: payload.settings.llmMaxRetries,
+        llmMinTimeoutMs: payload.settings.llmMinTimeoutMs,
+        llmMaxTimeoutMs: payload.settings.llmMaxTimeoutMs,
+        llmFactor: payload.settings.llmFactor,
+        llmCodes: payload.settings.llmCodes,
+        llmJitter: payload.settings.llmJitter,
+        llmJitterRatio: payload.settings.llmJitterRatio,
+      }
+    }
+
+    /** How often the live counters re-read the Host while the section is open. */
+    const STATUS_POLL_MS = 3000
+
     /** The Settings → Backoff section. */
     function Section(props) {
       const t = typeof props.t === 'function' ? props.t : (key) => en[key] ?? key
@@ -385,29 +423,7 @@ window.__ModuleLoader__.load({
           .then((payload) => {
             if (!alive) return
             setStatus(payload)
-            setDraft({
-              enabled: payload.enabled,
-              unlimited: payload.settings.unlimited,
-              maxAttempts: payload.settings.maxAttempts,
-              minTimeoutMs: payload.settings.minTimeoutMs,
-              maxTimeoutMs: payload.settings.maxTimeoutMs,
-              factor: payload.settings.factor,
-              codes: payload.settings.codes,
-              tools: payload.settings.tools,
-              armTimeout: payload.settings.armTimeout,
-              jitter: payload.settings.jitter,
-              jitterRatio: payload.settings.jitterRatio,
-              overrides: payload.settings.toolOverrides ?? {},
-              llmEnabled: payload.settings.llmEnabled,
-              llmUnlimited: payload.settings.llmUnlimited,
-              llmMaxRetries: payload.settings.llmMaxRetries,
-              llmMinTimeoutMs: payload.settings.llmMinTimeoutMs,
-              llmMaxTimeoutMs: payload.settings.llmMaxTimeoutMs,
-              llmFactor: payload.settings.llmFactor,
-              llmCodes: payload.settings.llmCodes,
-              llmJitter: payload.settings.llmJitter,
-              llmJitterRatio: payload.settings.llmJitterRatio,
-            })
+            setDraft(draftFrom(payload))
           })
           .catch(() => {
             if (alive) setStatus(false)
@@ -416,6 +432,33 @@ window.__ModuleLoader__.load({
           alive = false
         }
       }, [nonce])
+
+      // "Live counters" must actually be live: retries usually happen while
+      // this section stays mounted, and a stale snapshot reads as 0 forever.
+      // Only the read-only status is refreshed; the editable draft is left
+      // alone so an in-progress field edit is never overwritten.
+      React.useEffect(() => {
+        let alive = true
+        const refresh = () => {
+          if (typeof document !== 'undefined' && document.hidden) return
+          props
+            .fetchStatus()
+            .then((payload) => {
+              if (alive) setStatus(payload)
+            })
+            .catch(() => {})
+        }
+        const timer = setInterval(refresh, STATUS_POLL_MS)
+        const onVisibility = () => {
+          if (typeof document === 'undefined' || !document.hidden) refresh()
+        }
+        if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility)
+        return () => {
+          alive = false
+          clearInterval(timer)
+          if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility)
+        }
+      }, [])
 
       const commit = (key, raw) => {
         const next = {}
@@ -509,12 +552,19 @@ window.__ModuleLoader__.load({
             : h('div', { className: 'bo-sess' },
                 status.sessions.map((row) => {
                   const shortId = String(row.sessionId).length > 16 ? `${String(row.sessionId).slice(0, 14)}…` : String(row.sessionId)
-                  return h('div', { key: row.sessionId, className: 'bo-sess-row' },
+                  return h('div', { key: row.sessionId, className: 'bo-sess-item' },
                     h('b', null, shortId),
-                    h('span', null, `${row.attempts} ${t('sessionAttempts')}`),
-                    h('span', null, `${row.retries} ${t('sessionRetries')}`),
-                    h('span', null, `${row.timeouts} ${t('sessionTimeouts')}`),
-                    h('span', null, row.lastCode ?? t('noCode')),
+                    h('div', { className: 'bo-sess-line' },
+                      h('span', null, `${row.attempts} ${t('sessionAttempts')}`),
+                      h('span', null, `${row.retries} ${t('sessionRetries')}`),
+                      h('span', null, `${row.timeouts} ${t('sessionTimeouts')}`),
+                      h('span', null, `${t('sessionLastCode')}: ${row.lastCode ?? t('noCode')}`),
+                    ),
+                    h('div', { className: 'bo-sess-line' },
+                      h('span', null, `${row.llmAttempts ?? 0} ${t('sessionLlmAttempts')}`),
+                      h('span', null, `${row.llmRetries ?? 0} ${t('sessionLlmRetries')}`),
+                      h('span', null, `${t('sessionLlmLastCode')}: ${row.llmLastCode ?? t('noCode')}`),
+                    ),
                   )
                 }),
               ),
