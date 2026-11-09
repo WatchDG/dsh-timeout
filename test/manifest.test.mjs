@@ -112,10 +112,33 @@ test('the settings page renders per-session model counters and keeps status live
   assert.match(client, /setInterval\(refresh, STATUS_POLL_MS\)/)
 })
 
+test('the settings page reads the read-only policy from the form snapshot', () => {
+  const client = read('client.js')
+  // ConfigForm has no `readonly` field; the policy is `writable` on the live
+  // snapshot, which starts false while loading and must be subscribed.
+  assert.ok(!client.includes('form.readonly'), 'form.readonly does not exist on a ConfigForm')
+  assert.match(client, /getSnapshot\(\)\?\.writable === false/)
+  assert.match(client, /form\.subscribe\(read\)/)
+})
+
+test('the settings page reports a refused write as a failure', () => {
+  const client = read('client.js')
+  // ConfigForm.set resolves to whether the Host accepted the write; a false
+  // result must not render the success copy.
+  assert.match(client, /accepted === false/)
+  assert.ok(client.includes("setFeedback({ state: 'failed' })"), 'a refusal shows the failure copy')
+})
+
 test('the plugin entry point exports the Host plugin contract', async () => {
   const module = await import('../index.js')
   assert.equal(typeof module.apply, 'function')
   assert.equal(module.name, 'backoff')
-  assert.deepEqual(module.inject, ['tools', 'agents', 'sessionProjections'])
+  // The tool wrapper is the only hard dependency: agent/request-error carries
+  // its own agent and session, and no Session projection is registered.
+  assert.deepEqual(module.inject, ['tools'])
   assert.equal(module.Config?.type, 'object', 'settings service reads Config')
+})
+
+test('the manifest requires the Node.js version DSH 0.2.2 runs on', () => {
+  assert.equal(pkg.engines.node, '>=24.9.0', 'DSH 0.2.2 raises the runtime floor to Node.js 24.9')
 })

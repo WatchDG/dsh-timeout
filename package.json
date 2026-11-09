@@ -1,6 +1,6 @@
 {
   "name": "dsh-timeout",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "description": "Exponential backoff retry strategy for DeepSeek Harness tool calls and model requests: configurable min/max delays, growth factor, and max-attempts or unlimited policy for tools/execute plus agent/request-error.",
@@ -25,7 +25,7 @@
     "cordis"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=24.9.0"
   },
   "exports": {
     ".": "./index.js",
@@ -49,8 +49,8 @@
     "NOTICE"
   ],
   "scripts": {
-    "test": "node --test test/config.test.mjs test/backoff.test.mjs test/llm.test.mjs test/plugin.test.mjs test/client.test.mjs test/manifest.test.mjs",
-    "test:unit": "node --test test/config.test.mjs test/backoff.test.mjs test/llm.test.mjs test/plugin.test.mjs test/client.test.mjs test/manifest.test.mjs",
+    "test": "node --test test/config.test.mjs test/backoff.test.mjs test/llm.test.mjs test/plugin.test.mjs test/client.test.mjs test/contract.test.mjs test/manifest.test.mjs",
+    "test:unit": "node --test test/config.test.mjs test/backoff.test.mjs test/llm.test.mjs test/plugin.test.mjs test/client.test.mjs test/contract.test.mjs test/manifest.test.mjs",
     "pack:check": "npm pack --dry-run"
   },
   "dsh": {
@@ -66,5 +66,8 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "~3.18.5"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "~4.1.0"
   }
 }

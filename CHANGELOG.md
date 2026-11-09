@@ -5,6 +5,50 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-11-09
+
+### Changed
+
+- Adapted to DeepSeek Harness 0.2.2-RC.1 (Cordis 4.1.0). Tool retries were
+  re-implemented: 0.2.2 makes every waterfall `next()` single-use (a second call
+  throws `next() called multiple times`), so the wrapper now calls `next()`
+  exactly once for attempt 1 and re-runs the tool body directly through the
+  resolved `ToolDefinition` for every retry. Retried attempts keep the original
+  call identity, run `tools/pre-execute` and its approvals once, and still get
+  exactly one `tools/post-execute` / `tools/result` pass. Previously every
+  retry after the first threw, and the synthetic
+  `next() called multiple times` error reached the model instead of the tool
+  error.
+- Tool definition lookup now prefers `ctx.tools.executable(name, agent,
+  exec.toolSet)` — the 0.2.2 execution lookup, which applies the step's resolved
+  tool set so conditionally activated tools resolve correctly — and falls back
+  to `ctx.tools.get(name, agent)`.
+- Minimum runtime is Node.js 24.9 (`engines.node >= 24.9.0`), matching the DSH
+  0.2.2 requirement.
+- Settings → Backoff: read-only profiles are detected through
+  `form.getSnapshot().writable === false` instead of the nonexistent
+  `form.readonly`, so the form is actually disabled when the profile stores
+  settings read-only.
+- Settings → Backoff: a refused save (`form.set` returns `false`) reports a
+  failure instead of `Applied.` (new `saveFailed` copy in English and Russian).
+
+### Removed
+
+- The deprecated `ctx.sessionProjections.stateOf(session, key)` read and the
+  `sessionProjections` / `agents` injections. The read was dead code — no
+  projection unit was ever registered for its key — and 0.2.2 deprecates the
+  service-level call in favour of an awaited registration handle. Model-retry
+  chain state is now explicitly process-local per session and still resets on a
+  new turn/step; durable `llm/retry` / `tool/retry` session events are
+  unchanged. This also corrects the 0.3.0 note that claimed durable counters
+  through a `backoffLlmRetry` projection.
+
+### Fixed
+
+- A tool body that rejects on the per-attempt deadline now reports
+  `TOOL_TIMEOUT` (and counts a timeout) instead of returning the raw abort
+  error, which is not retryable by default.
+
 ## [0.3.2] - 2026-10-27
 
 ### Fixed

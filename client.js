@@ -415,6 +415,25 @@ window.__ModuleLoader__.load({
       const [feedback, setFeedback] = React.useState(null)
       const [newTool, setNewTool] = React.useState('')
 
+      // `readonly` is not a ConfigForm field: the form exposes the live policy
+      // through its snapshot (`writable === false` means a read-only profile).
+      // The snapshot starts at `writable: false` while it loads, so the policy
+      // must be subscribed instead of read once at mount.
+      const [readonlyForm, setReadonlyForm] = React.useState(props.readonly === true)
+      React.useEffect(() => {
+        const form = props.form
+        if (!form || typeof form.getSnapshot !== 'function' || typeof form.subscribe !== 'function') return undefined
+        const read = () => {
+          try {
+            setReadonlyForm(form.getSnapshot()?.writable === false)
+          } catch {
+            // A missing snapshot keeps the last known policy.
+          }
+        }
+        read()
+        return form.subscribe(read)
+      }, [props.form])
+
       React.useEffect(() => {
         let alive = true
         setStatus(null)
@@ -476,7 +495,16 @@ window.__ModuleLoader__.load({
         setFeedback({ state: 'applying' })
         Promise.resolve()
           .then(() => props.setField(key, next[key]))
-          .then(() => setFeedback({ state: 'applied' }))
+          .then((accepted) => {
+            if (accepted === false) {
+              // The Host refused the write: drop the optimistic draft and show
+              // the Host's own value instead of claiming success.
+              setFeedback({ state: 'failed' })
+              setNonce((value) => value + 1)
+              return
+            }
+            setFeedback({ state: 'applied' })
+          })
           .catch(() => setFeedback({ state: 'failed' }))
       }
 
@@ -485,7 +513,14 @@ window.__ModuleLoader__.load({
         setFeedback({ state: 'applying' })
         Promise.resolve()
           .then(() => props.setField('toolOverrides', overrides))
-          .then(() => setFeedback({ state: 'applied' }))
+          .then((accepted) => {
+            if (accepted === false) {
+              setFeedback({ state: 'failed' })
+              setNonce((value) => value + 1)
+              return
+            }
+            setFeedback({ state: 'applied' })
+          })
           .catch(() => setFeedback({ state: 'failed' }))
       }
 
@@ -512,7 +547,7 @@ window.__ModuleLoader__.load({
       }
 
       const readable = status && status !== false
-      const readonly = readable && props.readonly
+      const readonly = readable && readonlyForm
       const unavailable = status === false
       const overrideRows = Object.entries(draft.overrides ?? {})
 
@@ -647,6 +682,20 @@ window.__ModuleLoader__.load({
     const inject = ['slots', 'locale', 'configForms']
 
     /**
+     * Whether the Host stores this namespace read-only. A `ConfigForm` has no
+     * `readonly` field; the policy lives on its live snapshot as `writable`.
+     * @param {object} form ConfigForm served for this plugin's namespace.
+     * @returns {boolean}
+     */
+    function readOnly(form) {
+      try {
+        return form?.getSnapshot?.()?.writable === false
+      } catch {
+        return false
+      }
+    }
+
+    /**
      * Register the dictionaries and the section while the Host serves its
      * configuration namespace.
      * @param {object} ctx - browser plugin context.
@@ -672,7 +721,9 @@ window.__ModuleLoader__.load({
                   inject: () => ({
                     hooks: { env: form },
                     setField: (field, next) => form.set(field, next),
-                    readonly: form.readonly === true,
+                    // Initial policy only: the section subscribes to the form
+                    // snapshot and re-reads `writable` on every change.
+                    readonly: readOnly(form),
                     fetchStatus: async () => {
                       const response = await fetch(STATUS_PATH, {
                         method: 'GET',

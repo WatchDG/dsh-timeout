@@ -24,7 +24,8 @@ delay = min(maxTimeoutMs, minTimeoutMs × factor^(попытка − 1))
 
 | Требование | Детали |
 |---|---|
-| [DeepSeek Harness](https://www.deepseek.com/en/harness/) | 0.2.x (проверено на 0.2.1). Плагин использует сервис `tools` и событие `tools/execute`. |
+| [DeepSeek Harness](https://www.deepseek.com/en/harness/) | 0.2.2-RC.1 (проверено; также 0.2.1-RC.5). Плагин использует сервис `tools` и событие `tools/execute`. |
+| Node.js | 24.9 или новее; DSH 0.2.2 поднимает минимальную версию Node.js до 24.9. |
 
 Внешние бинарники не нужны, шага сборки нет.
 
@@ -51,10 +52,20 @@ delay = min(maxTimeoutMs, minTimeoutMs × factor^(попытка − 1))
 
 ### Цикл повторов с экспоненциальной задержкой
 
-Слушатель `tools/execute` заново запускает тело инструмента для того же
-идентификатора вызова (те же имя, аргументы, агент и сигнал). После каждой
-упавшей повторяемой попытки следует ожидание `minTimeoutMs × factor^(попытка − 1)`
-(не больше `maxTimeoutMs`), затем вызов отправляется снова.
+Слушатель `tools/execute` выполняет вызов и повторяет настроенные сбои для того
+же идентификатора вызова (те же имя, аргументы, агент и сигнал). Первая попытка
+вызывает `next()` водопада ровно один раз и выполняет остаток цепочки. В DSH
+0.2.2 поставляется Cordis 4.1.0, где `next()` одноразовый — повторный вызов
+бросает `next() called multiple times`, — поэтому повтор идёт в обход водопада:
+тело инструмента запускается напрямую через найденный `ToolDefinition`
+(`ctx.tools.executable(name, agent, exec.toolSet)`, с запасным
+`ctx.tools.get(name, agent)`), а реестр заново нормализует сырое значение через
+контракт вывода инструмента. Поэтому повторные попытки сохраняют исходный
+идентификатор вызова, единственный гейт `tools/pre-execute` и его подтверждения
+проходят один раз, а единственный проход `tools/post-execute` / `tools/result`
+по-прежнему случается один раз после возврата обёртки. После каждой упавшей
+повторяемой попытки следует ожидание `minTimeoutMs × factor^(попытка − 1)`
+(не больше `maxTimeoutMs`), затем начинается следующая попытка.
 
 Детали поведения:
 
@@ -127,6 +138,15 @@ delay = min(maxTimeoutMs, minTimeoutMs × factor^(попытка − 1))
 | `jitter` | `'none' \| 'equal' \| 'full'` | `'equal'` | случайность задержки: фикс., ±ratio вокруг базовой или равномерно 0..base |
 | `jitterRatio` | number | `0.5` | разброс для `equal`-джиттера (±50 %) |
 | `toolOverrides` | object | `{}` | частичные переопределения по инструментам; незаполненные поля наследуют глобальные |
+| `llmEnabled` | boolean | `false` | повторять запросы к модели (`Retried model request` в чате) |
+| `llmUnlimited` | boolean | `false` | неограниченные повторы модели (`retry/∞`) |
+| `llmMaxRetries` | number | `10` | повторы модели после первого сбоя; игнорируется при `llmUnlimited` |
+| `llmMinTimeoutMs` | number | `1000` | задержка первого повтора модели |
+| `llmMaxTimeoutMs` | number | `30000` | потолок задержки модели; `Retry-After` провайдера в его пределах выигрывает |
+| `llmFactor` | number | `2` | множитель роста задержки модели |
+| `llmCodes` | string[] | `[EMPTY_RESPONSE,RATE_LIMIT,SERVER,TIMEOUT,TRANSPORT]` | коды модели для повтора; `["*"]` — любой |
+| `llmJitter` | `'none' \| 'equal' \| 'full'` | `'equal'` | случайность задержки модели |
+| `llmJitterRatio` | number | `0.2` | разброс для `equal`-джиттера модели (±20 %) |
 
 ```yaml
 - id: backoff
@@ -148,6 +168,42 @@ delay = min(maxTimeoutMs, minTimeoutMs × factor^(попытка − 1))
         codes: [TOOL_TIMEOUT, COMMAND_FAILED]
       web_fetch:
         unlimited: true     # повторять загрузки до успеха
+    llmEnabled: true        # повторять Connection error (TRANSPORT) и т.п.
+    llmMaxRetries: 10
+    llmUnlimited: false     # true = retry/∞ до успеха или прерывания
+    llmMinTimeoutMs: 1000
+    llmMaxTimeoutMs: 30000
+    llmCodes: [EMPTY_RESPONSE, RATE_LIMIT, SERVER, TIMEOUT, TRANSPORT]
+```
+
+### Запросы к модели (`Retried model request`)
+
+Инструменты и модель полностью независимы: инструменты —
+`enabled/maxAttempts/unlimited/...`, модель —
+`llmEnabled/llmMaxRetries/llmUnlimited/...`. Отключение инструментов не
+останавливает повторы модели и наоборот.
+
+`Retried model request (retry/maximum)` — это встроенный исполнитель
+`dsh-llm-retry` плюс `retryPolicy` каждого провайдера (по умолчанию: 5 повторов
+для `EMPTY_RESPONSE,RATE_LIMIT,SERVER,TIMEOUT,TRANSPORT`). `Connection error` —
+это `TRANSPORT`, так что 5 повторов, а затем `This turn failed` — ожидаемое
+поведение по умолчанию.
+
+Плагин добавляет собственный слушатель `agent/request-error` при включённом
+`llmEnabled`, испуская те же события `llm/retry`, поэтому чат рендерит их так же
+(`retry/∞` при `llmUnlimited`). Его учёт цепочки повторов хранится в памяти
+процесса и по сессиям, сбрасывается при новом turn/step (исчерпанный бюджет
+никогда не глушит более поздние сбои); дурабельны в логе сессии только события
+`llm/retry` / `llm/retry-started`. Суммы складываются, когда включены оба
+исполнителя (встроенный + этот плагин); чтобы считать только этот плагин,
+отключите встроенный маршрут:
+
+```yaml
+- id: llm-pi-ai
+  config:
+    providers:
+      opencode-go:
+        retryPolicy: { mode: normal, maxRetries: 0 }
 ```
 
 ## Замечания по безопасности
@@ -159,8 +215,8 @@ delay = min(maxTimeoutMs, minTimeoutMs × factor^(попытка − 1))
 - По умолчанию повторяются **только таймауты** (`TOOL_TIMEOUT`) — классический
   случай, где повтор безвреден.
 - Плагин не ходит в сеть и не запускает процессы: он только управляет
-  существующим конвейером вызовов. Страница настроек обращается к собственному
-  аутентифицированному роуту хоста `/backoff/status`.
+  существующим конвейером выполнения инструментов. Страница настроек
+  обращается к собственному аутентифицированному роуту хоста `/backoff/status`.
 
 ## Проверка
 
@@ -186,8 +242,8 @@ delay = min(maxTimeoutMs, minTimeoutMs × factor^(попытка − 1))
 нет.
 
 ```bash
-npm install            # установить библиотеку схемы настроек
-npm test               # юнит-тесты и проверка манифеста
+npm install            # установить зависимости (схема настроек + Cordis для контрактных тестов)
+npm test               # юнит-тесты, контрактные тесты и проверка манифеста
 npm run test:unit      # те же наборы
 npm run pack:check     # проверить состав npm-пакета
 ```
@@ -200,7 +256,7 @@ client.js             страница Settings → Бэкoфф: счётчик�
 lib/config.js         схема Config, значения по умолчанию, нормализация, живой снапшот
 lib/backoff.js        чистая математика стратегии: задержки, классификация повторов, дедлайн
 lib/plugin.js         подключение к контексту (namespace настроек + цикл повторов tools/execute + роут статуса)
-test/                 наборы node:test (config, backoff, plugin, manifest)
+test/                 наборы node:test (config, backoff, llm, plugin, client, contract, manifest)
 ```
 
 Если добавляете runtime-модуль, добавьте его в `files` в `package.json`;

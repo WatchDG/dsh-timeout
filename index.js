@@ -14,6 +14,13 @@
  * cancels. The budget is `maxAttempts` total attempts, or unlimited when the
  * `unlimited` flag is set.
  *
+ * DSH 0.2.2 (Cordis 4.1.0) makes a waterfall `next()` single-use, so the
+ * wrapper calls `next()` exactly once (attempt 1) and re-runs the tool body
+ * directly through the resolved `ToolDefinition` for every retry. Retried
+ * attempts therefore keep the original call identity, the single
+ * `tools/pre-execute` gate and its approvals, and the single
+ * `tools/post-execute` / `tools/result` pass.
+ *
  * Models: when `llmEnabled` is on, the plugin also listens on
  * `agent/request-error` and retries failed model requests
  * (`Retried model request (retry/maximum)` in chat, `retry/∞` when
@@ -72,6 +79,7 @@ export function apply(ctx, config) {
 
 export { Config }
 export const name = 'backoff'
-// Tools for the tool wrapper; agents + sessionProjections for model recovery
-// (read-only best-effort; missing services fall back to in-memory counting).
-export const inject = ['tools', 'agents', 'sessionProjections']
+// The tool wrapper is the only hard dependency: `agent/request-error` carries
+// its own agent and session, so model recovery needs no `agents` service, and
+// the retry-chain state is process-local (no Session projection registration).
+export const inject = ['tools']

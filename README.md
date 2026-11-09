@@ -23,7 +23,8 @@ you control — no restart needed, settings are live-editable.
 
 | Requirement | Details |
 |---|---|
-| [DeepSeek Harness](https://www.deepseek.com/en/harness/) | 0.2.x (tested with 0.2.1). The plugin uses the Host `tools` service and the `tools/execute` event. |
+| [DeepSeek Harness](https://www.deepseek.com/en/harness/) | 0.2.2-RC.1 (tested; also 0.2.1-RC.5). The plugin uses the Host `tools` service and the `tools/execute` event. |
+| Node.js | 24.9 or newer; DSH 0.2.2 raises the runtime floor to Node.js 24.9. |
 
 No external binaries, no build step.
 
@@ -51,10 +52,20 @@ To uninstall, remove the bundle from the Plugin Manager (or
 
 ### Retry loop with exponential backoff
 
-A listener on `tools/execute` re-runs the tool body for the same call identity
-(same name, arguments, agent, signal). Each failed, retryable attempt is
+A listener on `tools/execute` runs the call and retries configured failures for
+the same call identity (same name, arguments, agent, signal). Attempt 1 calls
+the waterfall's `next()` exactly once and runs the rest of the chain. DSH 0.2.2
+ships Cordis 4.1.0, where `next()` is single-use — a second call throws
+`next() called multiple times` — so a retry bypasses the waterfall and re-runs
+the tool body directly through the resolved `ToolDefinition`
+(`ctx.tools.executable(name, agent, exec.toolSet)`, with a
+`ctx.tools.get(name, agent)` fallback); the registry re-normalizes the raw
+value through the tool's output contract. Retried attempts therefore keep the
+original call identity, the single `tools/pre-execute` gate and its approvals
+run once, and the single `tools/post-execute` / `tools/result` pass still
+happens once, after the wrapper returns. Each failed, retryable attempt is
 followed by a wait of `minTimeoutMs × factor^(attempt − 1)`, capped at
-`maxTimeoutMs`, then the call dispatches again.
+`maxTimeoutMs`, before the next attempt.
 
 Behavior details:
 
@@ -177,9 +188,11 @@ default.
 
 This plugin adds its own `agent/request-error` listener when `llmEnabled`
 is on, emitting the same `llm/retry` events so chat renders identically
-(`retry/∞` when `llmUnlimited`). Totals add up when both executors are on
-(built-in + this plugin); to count from this plugin only, disable the
-built-in route:
+(`retry/∞` when `llmUnlimited`). Its retry-chain bookkeeping is process-local,
+per session, and resets on a new turn/step (an exhausted budget never silences
+later failures); only the `llm/retry` / `llm/retry-started` events are durable
+in the session log. Totals add up when both executors are on (built-in + this
+plugin); to count from this plugin only, disable the built-in route:
 
 ```yaml
 - id: llm-pi-ai
@@ -198,7 +211,7 @@ built-in route:
 - The default retries **only deadline hits** (`TOOL_TIMEOUT`), which are the
   classic case where a retry is harmless.
 - The plugin performs no network access and spawns no processes; it only
-  orchestrates the existing tool dispatch pipeline. The Settings page talks to
+  orchestrates the existing tool execution pipeline. The Settings page talks to
   the Host's own authenticated `/backoff/status` route.
 
 ## Verification
@@ -226,8 +239,8 @@ One dependency (`@deepseek-ai/schemastery` for the settings schema) and no
 build step.
 
 ```bash
-npm install            # install the settings schema library
-npm test               # unit tests + manifest checks
+npm install            # install dependencies (settings schema + Cordis for the contract tests)
+npm test               # unit tests + contract tests + manifest checks
 npm run test:unit      # same suites
 npm run pack:check     # verify the npm package contents
 ```
@@ -240,7 +253,7 @@ client.js             Settings → Backoff page: counters + editable behavior fo
 lib/config.js         Config schema, defaults, normalization, volatile snapshot
 lib/backoff.js        pure strategy math: delays, retryable classification, deadline helper
 lib/plugin.js         context wiring (settings namespace + tools/execute retry loop + status route)
-test/                 node:test suites (config, backoff, plugin, manifest)
+test/                 node:test suites (config, backoff, llm, plugin, client, contract, manifest)
 ```
 
 When adding a runtime module, add it to `files` in `package.json`; the manifest

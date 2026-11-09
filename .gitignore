@@ -12,3 +12,6 @@ Thumbs.db
 # DSH / npm artifacts
 .plugin-manager/
 *.tgz
+
+# Local analysis scratch (extracted runtime sources, reports)
+.tmp/
