@@ -182,9 +182,21 @@ stop model retries and vice versa.
 
 `Retried model request (retry/maximum)` is the built-in `dsh-llm-retry`
 executor plus each provider's `retryPolicy` (default: 5 retries for
-`EMPTY_RESPONSE,RATE_LIMIT,SERVER,TIMEOUT,TRANSPORT`). `Connection error`
-is `TRANSPORT`, so 5 retries then `This turn failed` is the expected
-default.
+`EMPTY_RESPONSE,RATE_LIMIT,SERVER,TIMEOUT,TRANSPORT`). DSH's shipped pi-ai
+adapter classifies `Connection error` as `TRANSPORT`, so 5 retries then
+`This turn failed` is the expected default there.
+
+Custom pi-ai adapters (for example `dsh-opencode`) often skip that
+classification and emit the catch-all `PI_AI_ERROR` for every terminal stream
+error — `Connection error. / PI_AI_ERROR` included — and a thrown non-Harness
+network error arrives as `UNKNOWN`. Neither code is in the default policy, so
+without this plugin's reclassification the turn fails after the very first
+attempt even with `llmEnabled` on. The plugin now infers the code from
+`failure.message` for these unclassified failures, so `Connection error.` is
+retried as `TRANSPORT`, `HTTP 503` as `SERVER`, `timed out` as `TIMEOUT`, and
+so on; explicit codes always win, and quota/billing text stays non-retryable.
+When the built-in executor is disabled (as in the profile above), this plugin
+is the only recovery path.
 
 This plugin adds its own `agent/request-error` listener when `llmEnabled`
 is on, emitting the same `llm/retry` events so chat renders identically
@@ -229,6 +241,7 @@ plugin); to count from this plugin only, disable the built-in route:
 | Symptom | Cause / fix |
 |---|---|
 | Nothing retries | The plugin is disabled, the tool is not in `tools`, or the failure's code is not in `codes`. |
+| `Connection error / PI_AI_ERROR` fails the turn with no retries | A custom adapter emitted an unclassified code. The plugin now infers the code from the message; if the message carries no recognizable wording, add `PI_AI_ERROR` (or `UNKNOWN`) to `llmCodes`, or use `["*"]`. |
 | A hung call still hangs | `armTimeout` is off, or the tool declares no `timeoutMs` (nothing to arm). |
 | Too many retries | Lower `maxAttempts`, remove `*` from `codes`, or enable `unlimited` only deliberately. |
 | Settings page shows “not served” | The profile stores settings read-only, or the row id changed from `backoff`. |

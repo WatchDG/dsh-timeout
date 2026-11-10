@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-11-10
+
+### Fixed
+
+- Model retries no longer fail on `This turn failed` / `Connection error.
+  PI_AI_ERROR` when `llmEnabled` is on. Custom pi-ai adapters (e.g.
+  `dsh-opencode`) map every terminal stream error to the catch-all
+  `PI_AI_ERROR` code instead of classifying it, so the default `llmCodes`
+  (`EMPTY_RESPONSE,RATE_LIMIT,SERVER,TIMEOUT,TRANSPORT`) never matched and the
+  turn died before this plugin's backoff chain could run. A thrown, non-Harness
+  transport error reaches `agent/request-error` as `UNKNOWN` for the same
+  reason. `isLlmRetryable` now reclassifies these unclassified codes from
+  `failure.message` (mirroring DSH's `classifyPiAiError` plus pi-ai's own
+  `isRetryableAssistantError` wording), so `Connection error.` is recognized as
+  `TRANSPORT`, `HTTP 503` as `SERVER`, `timed out` as `TIMEOUT`, etc. Explicit
+  failure codes still win, quota/billing text stays non-retryable, and
+  unrelated generic errors (`pi-ai stream ended pending`) are still terminal.
+- Documentation corrected: `Connection error` is `TRANSPORT` only in DSH's
+  shipped pi-ai adapter; third-party adapters emit `PI_AI_ERROR`, which this
+  plugin now handles.
+
 ## [0.4.0] - 2026-11-09
 
 ### Changed

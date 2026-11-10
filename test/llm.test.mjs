@@ -3,7 +3,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { normalizeConfig, policyForLlm, snapshot } from '../lib/config.js'
-import { isLlmRetryable, llmPolicyKey, resolveLlmDelay } from '../lib/backoff.js'
+import { classifyFailureMessage, isLlmRetryable, llmPolicyKey, resolveLlmDelay } from '../lib/backoff.js'
 import { createRecoverWithBackoff } from '../lib/llm.js'
 
 const IMMEDIATE = async () => true
@@ -52,6 +52,33 @@ test('isLlmRetryable matches codes case-insensitively, * matches anything', () =
   assert.equal(isLlmRetryable({ code: 'UNKNOWN', message: 'x' }, { codes: ['TRANSPORT'] }), false)
   assert.equal(isLlmRetryable({ code: 'UNKNOWN', message: 'x' }, { codes: ['*'] }), true)
   assert.equal(isLlmRetryable({ code: 'TRANSPORT', message: 'x' }, { llmCodes: ['TRANSPORT'] }), true)
+})
+
+test('classifyFailureMessage recovers transport/server/timeout codes from generic messages', () => {
+  assert.equal(classifyFailureMessage('Connection error.'), 'TRANSPORT')
+  assert.equal(classifyFailureMessage('Connection error'), 'TRANSPORT')
+  assert.equal(classifyFailureMessage('ECONNRESET: socket hang up'), 'TRANSPORT')
+  assert.equal(classifyFailureMessage('HTTP 503 service unavailable'), 'SERVER')
+  assert.equal(classifyFailureMessage('request timed out after 30000ms'), 'TIMEOUT')
+  assert.equal(classifyFailureMessage('429 Too Many Requests'), 'RATE_LIMIT')
+  assert.equal(classifyFailureMessage('Monthly usage limit reached'), null)
+  assert.equal(classifyFailureMessage('An unknown error occurred'), null)
+  assert.equal(classifyFailureMessage(null), null)
+})
+
+test('unclassified PI_AI_ERROR Connection error matches a TRANSPORT policy (custom adapters)', () => {
+  const policy = { llmCodes: ['EMPTY_RESPONSE', 'RATE_LIMIT', 'SERVER', 'TIMEOUT', 'TRANSPORT'] }
+  // dsh-opencode (and other third-party pi-ai bridges) maps every terminal
+  // stream error to PI_AI_ERROR instead of classifying it. Without message
+  // reclassification this is `This turn failed` even with llmEnabled on.
+  assert.equal(isLlmRetryable({ code: 'PI_AI_ERROR', message: 'Connection error.' }, policy), true)
+  assert.equal(isLlmRetryable({ code: 'pi_ai_error', message: 'Connection error' }, policy), true)
+  assert.equal(isLlmRetryable({ code: 'UNKNOWN', message: 'fetch failed' }, policy), true)
+  assert.equal(isLlmRetryable({ message: 'Connection error.' }, policy), true)
+  assert.equal(isLlmRetryable({ code: 'PI_AI_ERROR', message: 'Monthly usage limit reached' }, policy), false)
+  assert.equal(isLlmRetryable({ code: 'PI_AI_ERROR', message: 'pi-ai stream ended pending' }, policy), false)
+  assert.equal(isLlmRetryable({ code: 'AUTH', message: 'Connection error.' }, policy), false)
+  assert.equal(isLlmRetryable({ code: 'PI_AI_ERROR', message: 'Connection error.' }, { llmCodes: ['*'] }), true)
 })
 
 test('llmPolicyKey changes when behavior-affecting fields change', () => {
@@ -103,6 +130,28 @@ test('tools switch does not gate model retries: each side on its own', async () 
   const decision = await recover(payloadFor(agent, { code: 'TRANSPORT', message: 'Connection error' }), async () => undefined)
   assert.deepEqual(decision, { kind: 'retry' })
   assert.equal(events.length, 2)
+})
+
+test('a generic PI_AI_ERROR Connection error is actually retried', async () => {
+  const { agent, events } = makeAgent()
+  const stats = { llmAttempts: 0, llmRetries: 0, llmLastCode: null }
+  const memory = {}
+  const recover = createRecoverWithBackoff({
+    readSettings: () => normalizeConfig({ llmEnabled: true, llmMaxRetries: 10 }),
+    delay: IMMEDIATE,
+    random: () => 0.5,
+    stats,
+    getState: () => memory,
+    onScheduled: (session, key, entry) => { memory[key] = entry },
+  })
+  const decision = await recover(
+    payloadFor(agent, { code: 'PI_AI_ERROR', message: 'Connection error.' }),
+    async () => undefined,
+  )
+  assert.deepEqual(decision, { kind: 'retry' })
+  assert.equal(events[0].type, 'llm/retry')
+  assert.equal(events[0].data.retry, 1)
+  assert.equal(stats.llmLastCode, 'PI_AI_ERROR')
 })
 
 test('eligible TRANSPORT failure schedules retry with chat-compatible events', async () => {

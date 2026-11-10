@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 
 import { policyFor, snapshot } from '../lib/config.js'
 import { RETRY_EVENT, RETRY_STARTED_EVENT, STATUS_PATH, createExecuteWithBackoff, mount, statusView } from '../lib/plugin.js'
+import { LLM_RETRY_EVENT } from '../lib/llm.js'
 
 const SUCCESS = { isError: false, value: { ok: true } }
 const FAIL = (code) => ({ isError: true, error: { message: 'boom', info: code ? { code } : undefined } })
@@ -514,4 +515,42 @@ test('mount falls back to the registry lookup when no tool set admits the tool',
     async () => FAIL('TOOL_TIMEOUT'),
   )
   assert.deepEqual(result, { isError: false, value: { ok: true } })
+})
+
+test('mount recovers a PI_AI_ERROR Connection error just like the real profile', async () => {
+  // The live profile composes dsh-timeout + dsh-opencode with dsh-llm-retry
+  // disabled. dsh-opencode maps every terminal pi-ai stream error to
+  // PI_AI_ERROR, so this is the exact payload the reported failure produced.
+  const listeners = new Map()
+  const events = []
+  const ctx = {
+    tools: {},
+    on: (event, listener) => {
+      listeners.set(event, listener)
+      return () => {}
+    },
+  }
+  mount(ctx, { llmEnabled: true, llmMaxRetries: 10 }, { delay: IMMEDIATE })
+  const agent = {
+    id: 's1',
+    session: { append: (type, data) => events.push({ type, data }) },
+  }
+  const payload = {
+    agent,
+    turn: 't1',
+    step: 's1',
+    provider: 'opencode-live',
+    failure: { code: 'PI_AI_ERROR', message: 'Connection error.' },
+    signal: new AbortController().signal,
+  }
+  let nextCalls = 0
+  const decision = await listeners.get('agent/request-error')(payload, async () => {
+    nextCalls += 1
+    return undefined
+  })
+  assert.deepEqual(decision, { kind: 'retry' })
+  assert.equal(nextCalls, 0, 'the plugin owns recovery instead of delegating to a failed turn')
+  assert.equal(events[0].type, LLM_RETRY_EVENT)
+  assert.equal(events[0].data.retry, 1)
+  assert.equal(events[0].data.provider, 'opencode-live')
 })
